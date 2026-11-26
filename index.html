@@ -110,11 +110,30 @@ const firebaseConfig = {
 const VAPID_KEY = "PASTE_VAPID_KEY";
 // مفتاح Web3Forms لإرسال الاقتراحات على الإيميل (من web3forms.com)
 const W3F_KEY = "9d62b7e2-40ac-47d9-af9d-a37459c015a1";
-let lastMail = 0;
 async function mailSuggestion(text){
-  if(W3F_KEY.startsWith("PASTE")||Date.now()-lastMail<30000)return;
-  lastMail=Date.now();
-  try{await fetch("https://api.web3forms.com/submit",{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify({access_key:W3F_KEY,subject:"Suggestion - Game of the Year vote",from_name:username,botcheck:false,message:text+"\n\n---\nUser: "+username+"\nUID: "+(me&&me.uid)+"\nLang: "+lang+"\nTime: "+new Date().toString()})})}catch(e){lastErr="mail: "+(e.message||"")}
+  if(W3F_KEY.startsWith("PASTE"))return "skip";
+  const body={access_key:W3F_KEY,subject:"Suggestion - Game of the Year vote",from_name:username,botcheck:false,message:text+"\n\n---\nUser: "+username+"\nUID: "+(me&&me.uid)+"\nLang: "+lang+"\nTime: "+new Date().toString()};
+  try{
+    const r=await fetch("https://api.web3forms.com/submit",{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify(body)});
+    let j={};try{j=await r.json()}catch(e){}
+    if(r.ok&&j.success!==false)return "ok";
+    throw new Error("w3f "+r.status+" "+(j.message||""));
+  }catch(e){
+    if(!(e instanceof TypeError))throw e;
+    // المتصفح منع قراءة الرد (CORS): نبعت بطريقة تانية مش محتاجة قراءة الرد
+    const f=new FormData();Object.keys(body).forEach(k=>f.append(k,String(body[k])));
+    try{await fetch("https://api.web3forms.com/submit",{method:"POST",body:f,mode:"no-cors"});return "opaque"}
+    catch(e2){
+      // آخر حل: فورم عادي في إطار مخفي (مش محتاج CORS)
+      await new Promise(res=>{
+        const fr=document.createElement("iframe");fr.name="w3f_"+Date.now();fr.style.display="none";document.body.appendChild(fr);
+        const fm=document.createElement("form");fm.method="POST";fm.action="https://api.web3forms.com/submit";fm.target=fr.name;fm.style.display="none";
+        Object.keys(body).forEach(k=>{const i=document.createElement("input");i.type="hidden";i.name=k;i.value=String(body[k]);fm.appendChild(i)});
+        document.body.appendChild(fm);fm.submit();
+        setTimeout(()=>{fm.remove();fr.remove();res()},6000)});
+      return "opaque";
+    }
+  }
 }
 const EMU = false;
 const app = initializeApp(firebaseConfig);
@@ -158,7 +177,7 @@ const TR = {
   win_h:"🏆 لعبة العام بحسب تصويت الموقع",win_votes:"{0} صوت من {1}",win_tie:"تعادل! لعبة العام بحسب تصويت الموقع: {0}",win_none:"انتهى التصويت بدون أي أصوات 🤷",win_note:"هذه نتيجة تصويت مستخدمي هذا الموقع فقط، وليست النتيجة الرسمية لـ The Game Awards.",
   notif_btn:"🔔 فعّل الإشعارات",notif_on:"🔔 الإشعارات مفعّلة",notif_denied:"الإشعارات محظورة من إعدادات المتصفح",notif_ok:"تم تفعيل الإشعارات ✔",notif_ios:"على الآيفون: افتح الموقع من Safari > زر المشاركة > إضافة إلى الشاشة الرئيسية، ثم افتحه من الأيقونة وفعّل الإشعارات.",notif_unsup:"المتصفح ده لا يدعم الإشعارات",notif_fail:"تعذر تفعيل الإشعارات",notif_h:"اعرف النتيجة أول بأول",
   report:"⚠️ بلّغ عن مشكلة",rp_h:"⚠️ بلّغ عن مشكلة",rp_p:"لو في خطأ أو حاجة مش شغالة، اكتب المشكلة وابعتها على الإيميل. هنضيف معلومات المتصفح تلقائياً عشان نعرف نصلحها.",rp_ph:"اوصف المشكلة (إيه اللي حصل؟ كنت بتعمل إيه؟)",rp_mail:"✉️ ابعت على الإيميل",rp_ce:"📋 نسخ الإيميل: {0}",rp_cd:"📋 نسخ ديسكورد: {0}",rp_close:"إغلاق",rp_cpe:"تم نسخ الإيميل",rp_cpd:"تم نسخ اسم ديسكورد",rp_prompt:"انسخ من هنا:",
-  rp_subj:"بلاغ مشكلة - تصويت لعبة العام",rp_issue:"المشكلة: ",rp_auto:"--- معلومات تلقائية ---",rp_user:"المستخدم: ",rp_page:"الصفحة: ",rp_tab:"التبويب: ",rp_time:"الوقت: ",rp_br:"المتصفح: ",rp_scr:"الشاشة: ",rp_net:"الإنترنت: ",rp_on:"متصل",rp_off:"غير متصل",rp_err:"آخر خطأ: ",rp_noerr:"لا يوجد",rp_guest:"(غير مسجل)",rp_lang:"اللغة: ",menu_profile:"👤 ملفي الشخصي",menu_sug:"💡 اقتراحات",sg_h:"💡 اقتراح لتحسين الموقع",sg_p:"عندك فكرة أو ميزة عايزها؟ اكتبها وهتوصل لصاحب الموقع.",sg_ph:"اكتب اقتراحك هنا...",sg_send:"إرسال الاقتراح",sg_ok:"وصل اقتراحك، شكراً! 🙏",sg_empty:"اكتب اقتراح الأول",menu_lang:"🌐 English",menu_report:"⚠️ بلّغ عن مشكلة",menu_refresh:"🔄 تحديث",menu_out:"🚪 تسجيل الخروج",
+  rp_subj:"بلاغ مشكلة - تصويت لعبة العام",rp_issue:"المشكلة: ",rp_auto:"--- معلومات تلقائية ---",rp_user:"المستخدم: ",rp_page:"الصفحة: ",rp_tab:"التبويب: ",rp_time:"الوقت: ",rp_br:"المتصفح: ",rp_scr:"الشاشة: ",rp_net:"الإنترنت: ",rp_on:"متصل",rp_off:"غير متصل",rp_err:"آخر خطأ: ",rp_noerr:"لا يوجد",rp_guest:"(غير مسجل)",rp_lang:"اللغة: ",menu_profile:"👤 ملفي الشخصي",menu_sug:"💡 اقتراحات",sg_h:"💡 اقتراح لتحسين الموقع",sg_p:"عندك فكرة أو ميزة عايزها؟ اكتبها وهتوصل لصاحب الموقع.",sg_ph:"اكتب اقتراحك هنا...",sg_send:"إرسال الاقتراح",sg_ok:"وصل اقتراحك، شكراً! 🙏",sg_empty:"اكتب اقتراح الأول",sg_sending:"جارٍ الإرسال...",sg_nomail:"تم حفظ اقتراحك، لكن تعذر إرسال نسخة الإيميل ({0}). صوّر الرسالة دي وابعتها لصاحب الموقع.",sg_fail:"تعذر إرسال الاقتراح. اتأكد من الإنترنت وجرّب تاني، أو ابعته من زر الإبلاغ عن مشكلة.",sg_perm:"غير مسموح الآن. تواصل مع صاحب الموقع (القواعد محتاجة تحديث).",menu_lang:"🌐 English",menu_report:"⚠️ بلّغ عن مشكلة",menu_refresh:"🔄 تحديث",menu_out:"🚪 تسجيل الخروج",
   pf_h:"ملفي الشخصي",pf_login:"اسم الدخول (ثابت): {0}",pf_name:"الاسم الظاهر",pf_name_ph:"الاسم اللي يظهر للآخرين",pf_pick:"📷 اختيار صورة",pf_rm:"حذف الصورة",pf_save:"حفظ",pf_saved:"تم حفظ ملفك ✔",pf_name_err:"الاسم من 1 إلى 30 حرف",pf_img_err:"تعذر قراءة الصورة",pf_note:"الصورة بتتصغر تلقائياً. الاسم الظاهر مش بيغيّر اسم الدخول.",t_friends:"👥 الأصدقاء",fr_h_in:"طلبات صداقة ({0})",fr_h_out:"طلبات أرسلتها",fr_h_list:"أصدقائي ({0})",fr_search:"ابحث باسم المستخدم أو الاسم",fr_find:"ابحث عن أصدقاء",fr_add:"إضافة",fr_sent:"تم الإرسال",fr_accept:"قبول",fr_decline:"رفض",fr_cancel:"إلغاء",fr_remove:"حذف",fr_friends:"أصدقاء ✔",fr_none:"لسه ما عندكش أصدقاء. ابحث عن أصحابك باسم المستخدم وأضفهم.",fr_nores:"لا توجد نتائج",fr_voted:"صوّت لـ {0}",fr_novote:"لسه ما صوّتش",fr_pick_h:"اختيارات أصدقائي",fr_pick_none:"لما أصدقاؤك يصوتوا هتظهر اختياراتهم هنا.",fr_req_ok:"تم إرسال طلب الصداقة ✔",fr_acc_ok:"تمت الصداقة ✔",fr_confirm:"حذف الصديق؟",fr_you:"أنت",fr_pick_votes:"{0} من أصدقائك"},
  en:{title:"🏆 Game of the Year: Community Vote",login_h:"Log in / Create account",ph_user:"Username (English letters and numbers)",ph_pass:"Password (at least 6 characters)",show_pass:"Show password",login:"Log in",register:"Create new account",
   err_user:"Username: 3 to 20 English letters, numbers or _",err_pass6:"Password must be at least 6 characters",
@@ -178,7 +197,7 @@ const TR = {
   win_h:"🏆 Game of the Year by site vote",win_votes:"{0} votes out of {1}",win_tie:"It's a tie! Game of the Year by site vote: {0}",win_none:"Voting ended with no votes 🤷",win_note:"This is the result of this site's users only, not the official The Game Awards result.",
   notif_btn:"🔔 Enable notifications",notif_on:"🔔 Notifications are on",notif_denied:"Notifications are blocked in the browser settings",notif_ok:"Notifications enabled ✔",notif_ios:"On iPhone: open the site in Safari > Share button > Add to Home Screen, then open it from the icon and enable notifications.",notif_unsup:"This browser does not support notifications",notif_fail:"Could not enable notifications",notif_h:"Get the result as soon as it happens",
   report:"⚠️ Report a problem",rp_h:"⚠️ Report a problem",rp_p:"If something is broken or not working, describe it and send it by email. Browser info is added automatically so it can be fixed.",rp_ph:"Describe the problem (what happened? what were you doing?)",rp_mail:"✉️ Send by email",rp_ce:"📋 Copy email: {0}",rp_cd:"📋 Copy Discord: {0}",rp_close:"Close",rp_cpe:"Email copied",rp_cpd:"Discord name copied",rp_prompt:"Copy from here:",
-  rp_subj:"Problem report - Game of the Year vote",rp_issue:"Problem: ",rp_auto:"--- Automatic info ---",rp_user:"User: ",rp_page:"Page: ",rp_tab:"Tab: ",rp_time:"Time: ",rp_br:"Browser: ",rp_scr:"Screen: ",rp_net:"Internet: ",rp_on:"online",rp_off:"offline",rp_err:"Last error: ",rp_noerr:"none",rp_guest:"(not logged in)",rp_lang:"Language: ",menu_profile:"👤 My profile",menu_sug:"💡 Suggestions",sg_h:"💡 Suggest an improvement",sg_p:"Have an idea or a feature you want? Write it and it goes to the site owner.",sg_ph:"Write your suggestion here...",sg_send:"Send suggestion",sg_ok:"Suggestion sent, thanks! 🙏",sg_empty:"Write a suggestion first",menu_lang:"🌐 عربي",menu_report:"⚠️ Report a problem",menu_refresh:"🔄 Refresh",menu_out:"🚪 Log out",
+  rp_subj:"Problem report - Game of the Year vote",rp_issue:"Problem: ",rp_auto:"--- Automatic info ---",rp_user:"User: ",rp_page:"Page: ",rp_tab:"Tab: ",rp_time:"Time: ",rp_br:"Browser: ",rp_scr:"Screen: ",rp_net:"Internet: ",rp_on:"online",rp_off:"offline",rp_err:"Last error: ",rp_noerr:"none",rp_guest:"(not logged in)",rp_lang:"Language: ",menu_profile:"👤 My profile",menu_sug:"💡 Suggestions",sg_h:"💡 Suggest an improvement",sg_p:"Have an idea or a feature you want? Write it and it goes to the site owner.",sg_ph:"Write your suggestion here...",sg_send:"Send suggestion",sg_ok:"Suggestion sent, thanks! 🙏",sg_empty:"Write a suggestion first",sg_sending:"Sending...",sg_nomail:"Your suggestion was saved, but the email copy failed ({0}). Take a screenshot of this message and send it to the site owner.",sg_fail:"Could not send your suggestion. Check your internet and try again, or send it through Report a problem.",sg_perm:"Not allowed right now. Contact the site owner (the rules need updating).",menu_lang:"🌐 عربي",menu_report:"⚠️ Report a problem",menu_refresh:"🔄 Refresh",menu_out:"🚪 Log out",
   pf_h:"My profile",pf_login:"Login name (fixed): {0}",pf_name:"Display name",pf_name_ph:"The name others see",pf_pick:"📷 Choose photo",pf_rm:"Remove photo",pf_save:"Save",pf_saved:"Profile saved ✔",pf_name_err:"Name must be 1 to 30 characters",pf_img_err:"Could not read the image",pf_note:"The photo is shrunk automatically. Display name does not change your login name.",t_friends:"👥 Friends",fr_h_in:"Friend requests ({0})",fr_h_out:"Requests I sent",fr_h_list:"My friends ({0})",fr_search:"Search by username or name",fr_find:"Find friends",fr_add:"Add",fr_sent:"Sent",fr_accept:"Accept",fr_decline:"Decline",fr_cancel:"Cancel",fr_remove:"Remove",fr_friends:"Friends ✔",fr_none:"You have no friends yet. Search by username and add people you know.",fr_nores:"No results",fr_voted:"Voted for {0}",fr_novote:"Hasn't voted yet",fr_pick_h:"My friends' picks",fr_pick_none:"When your friends vote, their picks show up here.",fr_req_ok:"Friend request sent ✔",fr_acc_ok:"You are now friends ✔",fr_confirm:"Remove this friend?",fr_you:"You",fr_pick_votes:"{0} of your friends"}
 };
 let lang = localStorage.getItem("goty_lang") || ((navigator.language||"ar").toLowerCase().startsWith("ar") ? "ar" : "en");
@@ -285,10 +304,20 @@ function sugView(){
   $("#sgc").onclick=()=>{$("#modal").innerHTML=""};
   $("#mbg").onclick=e=>{if(e.target.id==="mbg")$("#modal").innerHTML=""};
   $("#sgs").onclick=async()=>{const x=$("#sgt").value.trim();if(!x){$("#sgm").textContent=t("sg_empty");return}
-    $("#sgs").disabled=true;
+    $("#sgs").disabled=true;$("#sgm").textContent="";$("#sgs").textContent=t("sg_sending");
     const n=(+localStorage.getItem("goty_sg")||0)%5+1;
-    try{await setDoc(doc(db,"suggestions",me.uid+"_"+n),{uid:me.uid,username,text:x,ts:serverTimestamp()});localStorage.setItem("goty_sg",n);mailSuggestion(x);$("#modal").innerHTML="";toast(t("sg_ok"))}
-    catch(e){$("#sgm").textContent=errText(e);$("#sgs").disabled=false}};
+    const TO=(pr,ms)=>Promise.race([pr,new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),ms))]);
+    const [fsr,mlr]=await Promise.allSettled([
+      TO(setDoc(doc(db,"suggestions",me.uid+"_"+n),{uid:me.uid,username,text:x,ts:serverTimestamp()}),10000),
+      TO(mailSuggestion(x),10000)]);
+    const fsOk=fsr.status==="fulfilled",mailOk=mlr.status==="fulfilled"&&mlr.value!=="skip";
+    if(!fsOk)lastErr="suggestion save: "+(fsr.reason&&(fsr.reason.code||fsr.reason.message));
+    if(mlr.status==="rejected")lastErr+=" | mail: "+(mlr.reason&&mlr.reason.message);
+    if(fsOk||mailOk){localStorage.setItem("goty_sg",n);$("#modal").innerHTML="";
+      if(mlr.status==="rejected"){const why=(mlr.reason&&mlr.reason.message)||"?";alert(t("sg_nomail",why));}
+      else toast(t("sg_ok"));return}
+    $("#sgm").textContent=(fsr.reason&&fsr.reason.code&&fsr.reason.code.includes("permission")?t("sg_perm"):t("sg_fail"));
+    $("#sgs").disabled=false;$("#sgs").textContent=t("sg_send")};
 }
 function profileView(){
   let photo=profile.photo||"",changed=false;
