@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لعبة العام - تصويت الأصدقاء</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#12121a;color:#eee}
+header{background:#1d1d2b;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+h1{font-size:18px;margin:0}
+main{max-width:640px;margin:0 auto;padding:14px}
+.card{background:#1d1d2b;border-radius:10px;padding:14px;margin:10px 0}
+input,textarea,button{font:inherit;width:100%;padding:10px;margin:6px 0;border-radius:8px;border:1px solid #444;background:#12121a;color:#eee}
+button{background:#e8b923;color:#111;border:0;font-weight:bold;cursor:pointer}
+button.sec{background:#333;color:#eee;width:auto;padding:6px 12px;margin:0}
+.msg{color:#ff8a8a;min-height:20px}
+.ok{color:#8aff9a}
+.game{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.small{color:#aaa;font-size:13px}
+.rev{border-top:1px solid #333;padding:8px 0}
+.bar{height:6px;background:#e8b923;border-radius:3px;margin-top:4px}
+a{color:#e8b923;cursor:pointer}
+</style>
+</head>
+<body>
+<header><h1>🏆 لعبة العام - تصويت الأصدقاء</h1><div id="who"></div></header>
+<main id="app">جارٍ التحميل...</main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+import {getFirestore,doc,setDoc,getDoc,getDocs,collection,query,where,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+// ===== الصق إعدادات Firebase هنا (من Project settings > Your apps) =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDaFa5oEOERPkiFkFE05nEWX2OAqvaUUd0",
+  authDomain: "goty-vote.firebaseapp.com",
+  projectId: "goty-vote",
+  storageBucket: "goty-vote.firebasestorage.app",
+  messagingSenderId: "501020461143",
+  appId: "1:501020461143:web:bc40f4601c8c95a7cd7b12"
+};
+// ======================================================================
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app), db = getFirestore(app);
+
+const GAMES = [
+ {id:"007",name:"007 First Light",dev:"IO Interactive"},
+ {id:"control",name:"Control Resonant",dev:"Remedy / Annapurna"},
+ {id:"gta6",name:"Grand Theft Auto VI",dev:"Rockstar Games"},
+ {id:"phantom",name:"Phantom Blade Zero",dev:"S-GAME"},
+ {id:"re",name:"Resident Evil Requiem",dev:"Capcom"},
+ {id:"zelda",name:"The Legend of Zelda: Ocarina of Time",dev:"Nintendo"}
+];
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const mail = u => u.toLowerCase()+"@goty.app";
+const validUser = u => /^[A-Za-z0-9_]{3,20}$/.test(u);
+let me = null, username = "", current = null;
+
+function errText(e){
+  const c = e.code||"";
+  if (c.includes("email-already")) return "اسم المستخدم مستخدم بالفعل";
+  if (c.includes("weak-password")) return "كلمة السر ضعيفة (6 حروف على الأقل)";
+  if (c.includes("invalid-credential")||c.includes("wrong-password")||c.includes("user-not-found")) return "اسم المستخدم أو كلمة السر غلط";
+  if (c.includes("permission")) return "غير مسموح";
+  if (c.includes("too-many")) return "محاولات كثيرة، استنى شوية";
+  return "حصل خطأ: "+(c||e.message);
+}
+
+function loginView(){
+  $("#who").innerHTML="";
+  $("#app").innerHTML=`<div class="card"><h2>تسجيل الدخول / حساب جديد</h2>
+  <input id="u" placeholder="اسم المستخدم (حروف إنجليزي وأرقام)" autocapitalize="none" autocomplete="username">
+  <input id="p" type="password" placeholder="كلمة السر (6 حروف على الأقل)" autocomplete="current-password">
+  <div class="msg" id="m"></div>
+  <button id="login">دخول</button>
+  <button id="reg" style="background:#333;color:#eee">إنشاء حساب جديد</button></div>`;
+  const get=()=>{const u=$("#u").value.trim(),p=$("#p").value;
+    if(!validUser(u)){$("#m").textContent="اسم المستخدم: 3 إلى 20 حرف إنجليزي أو أرقام أو _";return null}
+    return [u,p]};
+  $("#login").onclick=async()=>{const x=get();if(!x)return;try{await signInWithEmailAndPassword(auth,mail(x[0]),x[1])}catch(e){$("#m").textContent=errText(e)}};
+  $("#reg").onclick=async()=>{const x=get();if(!x)return;
+    try{
+      const c=await createUserWithEmailAndPassword(auth,mail(x[0]),x[1]);
+      await setDoc(doc(db,"users",c.user.uid),{username:x[0]});
+      username=x[0]; await homeView();
+    }catch(e){$("#m").textContent=errText(e)}};
+}
+
+async function homeView(){
+  $("#who").innerHTML=`${esc(username)} <button class="sec" id="out">خروج</button>`;
+  $("#out").onclick=()=>signOut(auth);
+  $("#app").innerHTML="جارٍ التحميل...";
+  const vs=await getDocs(collection(db,"votes"));
+  const counts={};let mine=null;
+  vs.forEach(d=>{const g=d.data().game;counts[g]=(counts[g]||0)+1;if(d.id===me.uid)mine=g});
+  const total=vs.size||1;
+  $("#app").innerHTML=(mine?`<div class="card ok">صوتّ لـ: ${esc(GAMES.find(g=>g.id===mine).name)} (تقدر تغيّر صوتك)</div>`:`<div class="card">لسه ما صوتّش. اختار لعبة وصوّت.</div>`)+
+  GAMES.map(g=>`<div class="card"><div class="game"><div><b>${esc(g.name)}</b><div class="small">${esc(g.dev)}</div></div><div>${counts[g.id]||0} صوت</div></div>
+  <div class="bar" style="width:${Math.round((counts[g.id]||0)/total*100)}%"></div>
+  <div class="game" style="margin-top:8px"><button data-v="${g.id}">${mine===g.id?"✔ صوتك":"صوّت"}</button><button class="sec" data-r="${g.id}" style="margin-inline-start:8px">التقييمات</button></div></div>`).join("");
+  document.querySelectorAll("[data-v]").forEach(b=>b.onclick=async()=>{
+    try{await setDoc(doc(db,"votes",me.uid),{game:b.dataset.v,username,ts:serverTimestamp()});homeView()}catch(e){alert(errText(e))}});
+  document.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>gameView(b.dataset.r));
+}
+
+async function gameView(id){
+  const g=GAMES.find(x=>x.id===id);
+  $("#app").innerHTML="جارٍ التحميل...";
+  const rs=await getDocs(query(collection(db,"reviews"),where("game","==",id)));
+  const list=[];rs.forEach(d=>list.push(d.data()));
+  list.sort((a,b)=>(b.ts?.seconds||0)-(a.ts?.seconds||0));
+  const mineR=list.find(r=>r.uid===me.uid);
+  $("#app").innerHTML=`<p><a id="back">← رجوع</a></p><div class="card"><h2>${esc(g.name)}</h2><div class="small">${esc(g.dev)}</div></div>
+  <div class="card"><b>${mineR?"عدّل تقييمك":"اكتب تقييمك"}</b>
+  <textarea id="t" rows="4" maxlength="1000" placeholder="رأيك في اللعبة...">${mineR?esc(mineR.text):""}</textarea>
+  <div class="msg" id="m"></div><button id="save">حفظ التقييم</button></div>
+  <div class="card"><b>تقييمات الأصدقاء (${list.length})</b>${list.map(r=>`<div class="rev"><b>${esc(r.username)}</b><div>${esc(r.text)}</div></div>`).join("")||'<div class="small">لا توجد تقييمات بعد</div>'}</div>`;
+  $("#back").onclick=homeView;
+  $("#save").onclick=async()=>{const t=$("#t").value.trim();if(!t){$("#m").textContent="اكتب تقييم";return}
+    try{await setDoc(doc(db,"reviews",me.uid+"_"+id),{game:id,username,text:t,ts:serverTimestamp(),uid:me.uid});gameView(id)}catch(e){$("#m").textContent=errText(e)}};
+}
+
+onAuthStateChanged(auth,async u=>{
+  me=u;
+  if(!u){loginView();return}
+  try{const s=await getDoc(doc(db,"users",u.uid));username=s.exists()?s.data().username:(u.email||"").split("@")[0];}catch(e){username=(u.email||"").split("@")[0]}
+  homeView();
+});
+</script>
+</body>
+</html>
