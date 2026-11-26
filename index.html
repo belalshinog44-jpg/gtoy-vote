@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#12121a">
-<title>لعبة العام - تصويت الأصدقاء</title>
+<title>لعبة العام: تصويت المجتمع</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:Tahoma,Arial,sans-serif;background:radial-gradient(circle at top,#232340,#12121a 60%) fixed;color:#eee;min-height:100vh}
@@ -42,6 +42,12 @@ html[dir=ltr] .nm{text-align:left}
 .menu button{background:transparent;color:#eee;text-align:start;font-weight:normal;margin:0;padding:11px;border-radius:8px}
 .menu button:hover{background:#34344d;transform:none;box-shadow:none;filter:none}
 .hd{display:flex;align-items:center;gap:6px}
+.tabs button{font-size:13px!important;padding:9px 2px!important;position:relative}
+.dot{background:#e53935;color:#fff;border-radius:10px;font-size:11px;padding:1px 6px;margin-inline-start:3px}
+.frow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #2c2c40}
+.frow .av{margin:0}
+.frow .grow{flex:1;min-width:0}
+.frow button{width:auto;margin:0;padding:7px 12px;font-size:13px}
 .lang{width:auto!important;padding:6px 10px!important;margin:0!important}
 .small{color:#aaa;font-size:13px}
 .tabs{display:flex;gap:6px;margin:6px 0}
@@ -81,7 +87,7 @@ a{color:#e8b923;cursor:pointer}
 </style>
 </head>
 <body>
-<header><h1>🏆 لعبة العام - تصويت الأصدقاء</h1><div id="who"></div></header>
+<header><h1>🏆 لعبة العام: تصويت المجتمع</h1><div id="who"></div></header>
 <div id="off" class="off" style="display:none">⚠️ لا يوجد اتصال بالإنترنت</div>
 <main id="app"><div class="spin">...</div></main>
 
@@ -89,7 +95,7 @@ a{color:#e8b923;cursor:pointer}
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
-import {getFirestore,doc,setDoc,getDoc,getDocs,collection,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import {getFirestore,doc,setDoc,getDoc,getDocs,collection,query,where,updateDoc,deleteDoc,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 import {getMessaging,getToken,onMessage,isSupported} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-messaging.js";
 
 const firebaseConfig = {
@@ -102,6 +108,14 @@ const firebaseConfig = {
 };
 // مفتاح الإشعارات (VAPID): Project settings > Cloud Messaging > Web Push certificates > Generate key pair
 const VAPID_KEY = "PASTE_VAPID_KEY";
+// مفتاح Web3Forms لإرسال الاقتراحات على الإيميل (من web3forms.com)
+const W3F_KEY = "9d62b7e2-40ac-47d9-af9d-a37459c015a1";
+let lastMail = 0;
+async function mailSuggestion(text){
+  if(W3F_KEY.startsWith("PASTE")||Date.now()-lastMail<30000)return;
+  lastMail=Date.now();
+  try{await fetch("https://api.web3forms.com/submit",{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json"},body:JSON.stringify({access_key:W3F_KEY,subject:"Suggestion - Game of the Year vote",from_name:username,botcheck:false,message:text+"\n\n---\nUser: "+username+"\nUID: "+(me&&me.uid)+"\nLang: "+lang+"\nTime: "+new Date().toString()})})}catch(e){lastErr="mail: "+(e.message||"")}
+}
 const EMU = false;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app), db = getFirestore(app);
@@ -126,46 +140,46 @@ const GAMES = [
 
 // ===== اللغات =====
 const TR = {
- ar:{title:"🏆 لعبة العام - تصويت الأصدقاء",login_h:"تسجيل الدخول / حساب جديد",ph_user:"اسم المستخدم (حروف إنجليزي وأرقام)",ph_pass:"كلمة السر (6 حروف على الأقل)",show_pass:"إظهار كلمة السر",login:"دخول",register:"إنشاء حساب جديد",
+ ar:{title:"🏆 لعبة العام: تصويت المجتمع",login_h:"تسجيل الدخول / حساب جديد",ph_user:"اسم المستخدم (حروف إنجليزي وأرقام)",ph_pass:"كلمة السر (6 حروف على الأقل)",show_pass:"إظهار كلمة السر",login:"دخول",register:"إنشاء حساب جديد",
   err_user:"اسم المستخدم: 3 إلى 20 حرف إنجليزي أو أرقام أو _",err_pass6:"كلمة السر 6 حروف على الأقل",
   e_exists:"اسم المستخدم مستخدم بالفعل",e_weak:"كلمة السر ضعيفة (6 حروف على الأقل)",e_bad:"اسم المستخدم أو كلمة السر غلط",e_perm:"غير مسموح",e_many:"محاولات كثيرة، استنى شوية",e_net:"مشكلة في الإنترنت، جرّب تاني",e_other:"حصل خطأ: {0}",
   loading:"جارٍ التحميل...",retry:"إعادة المحاولة",out:"خروج",refresh:"تحديث",refreshing:"جارٍ التحديث...",offline:"⚠️ لا يوجد اتصال بالإنترنت",
   t_vote:"🗳️ التصويت",t_results:"📊 النتائج",t_reviews:"💬 التقييمات",
-  cd_open:"⏳ باقي على قفل التصويت (10 ديسمبر الساعة 4 الفجر بتوقيت القاهرة)",cd_wait:"🎬 باقي على بداية حفل The Game Awards (11 ديسمبر الساعة 2:30 فجراً بتوقيت القاهرة). سيظهر فائز الأصدقاء مع بداية الحفل.",
+  cd_open:"⏳ باقي على قفل التصويت (10 ديسمبر الساعة 4 الفجر بتوقيت القاهرة)",cd_wait:"🎬 باقي على بداية حفل The Game Awards (11 ديسمبر الساعة 2:30 فجراً بتوقيت القاهرة). ستظهر لعبة العام بحسب تصويت الموقع مع بداية الحفل.",
   d:"يوم",h:"ساعة",m:"دقيقة",s:"ثانية",
   closed:"🔒 انتهى التصويت. تقدر تشوف النتائج الحالية في تبويب النتائج.",
   voted_for:"✅ صوتّ لـ: {0}",can_change:" (تقدر تغيّر صوتك)",not_voted:"لسه ما صوتّش. اختار لعبة وصوّت 👇",
   votes:"{0} صوت",vote:"صوّت",your_vote:"✔ صوتك",vote_done:"تم تسجيل صوتك ✔",
   invite:"ادعو أصحابك للتصويت",share_site:"📤 شارك رابط الموقع",share_res:"📊 شارك النتائج الحالية",copied:"تم نسخ الرابط",share_text:"صوّت معايا على لعبة العام 🏆",
   res_total:"إجمالي الأصوات: {0}",res_none:"لا توجد أصوات بعد",res_tie:"تعادل في الصدارة بين {0}",res_lead:"المتصدر: {0}",and:" و ",
-  res_msg:"🏆 نتائج تصويت لعبة العام بين الأصحاب ({0} صوت)",res_line:"{0}. {1} - {2} صوت",res_join:"صوّت معانا: ",
+  res_msg:"🏆 نتائج تصويت لعبة العام ({0} صوت)",res_line:"{0}. {1} - {2} صوت",res_join:"صوّت معانا: ",
   rev_all:"الكل",rev_h:"آخر التقييمات ({0})",rev_about:"عن",rev_you:"أنت",rev_none:"لا توجد تقييمات بعد. افتح أي لعبة من التصويت واكتب رأيك.",
-  back:"← رجوع",rev_edit:"عدّل تقييمك",rev_write:"اكتب تقييمك",rev_ph:"رأيك في اللعبة...",rev_save:"حفظ التقييم",rev_saved:"تم حفظ تقييمك ✔",rev_empty:"اكتب تقييم",rev_friends:"تقييمات الأصدقاء ({0})",rev_none2:"لا توجد تقييمات بعد",
-  win_h:"🏆 لعبة العام بين الأصدقاء",win_votes:"{0} صوت من {1}",win_tie:"تعادل! لعبة العام بين الأصدقاء: {0}",win_none:"انتهى التصويت بدون أي أصوات 🤷",win_note:"هذه نتيجة تصويت الأصدقاء في هذا الموقع فقط، وليست النتيجة الرسمية لـ The Game Awards.",
+  back:"← رجوع",rev_edit:"عدّل تقييمك",rev_write:"اكتب تقييمك",rev_ph:"رأيك في اللعبة...",rev_save:"حفظ التقييم",rev_saved:"تم حفظ تقييمك ✔",rev_empty:"اكتب تقييم",rev_friends:"التقييمات ({0})",rev_none2:"لا توجد تقييمات بعد",
+  win_h:"🏆 لعبة العام بحسب تصويت الموقع",win_votes:"{0} صوت من {1}",win_tie:"تعادل! لعبة العام بحسب تصويت الموقع: {0}",win_none:"انتهى التصويت بدون أي أصوات 🤷",win_note:"هذه نتيجة تصويت مستخدمي هذا الموقع فقط، وليست النتيجة الرسمية لـ The Game Awards.",
   notif_btn:"🔔 فعّل الإشعارات",notif_on:"🔔 الإشعارات مفعّلة",notif_denied:"الإشعارات محظورة من إعدادات المتصفح",notif_ok:"تم تفعيل الإشعارات ✔",notif_ios:"على الآيفون: افتح الموقع من Safari > زر المشاركة > إضافة إلى الشاشة الرئيسية، ثم افتحه من الأيقونة وفعّل الإشعارات.",notif_unsup:"المتصفح ده لا يدعم الإشعارات",notif_fail:"تعذر تفعيل الإشعارات",notif_h:"اعرف النتيجة أول بأول",
   report:"⚠️ بلّغ عن مشكلة",rp_h:"⚠️ بلّغ عن مشكلة",rp_p:"لو في خطأ أو حاجة مش شغالة، اكتب المشكلة وابعتها على الإيميل. هنضيف معلومات المتصفح تلقائياً عشان نعرف نصلحها.",rp_ph:"اوصف المشكلة (إيه اللي حصل؟ كنت بتعمل إيه؟)",rp_mail:"✉️ ابعت على الإيميل",rp_ce:"📋 نسخ الإيميل: {0}",rp_cd:"📋 نسخ ديسكورد: {0}",rp_close:"إغلاق",rp_cpe:"تم نسخ الإيميل",rp_cpd:"تم نسخ اسم ديسكورد",rp_prompt:"انسخ من هنا:",
   rp_subj:"بلاغ مشكلة - تصويت لعبة العام",rp_issue:"المشكلة: ",rp_auto:"--- معلومات تلقائية ---",rp_user:"المستخدم: ",rp_page:"الصفحة: ",rp_tab:"التبويب: ",rp_time:"الوقت: ",rp_br:"المتصفح: ",rp_scr:"الشاشة: ",rp_net:"الإنترنت: ",rp_on:"متصل",rp_off:"غير متصل",rp_err:"آخر خطأ: ",rp_noerr:"لا يوجد",rp_guest:"(غير مسجل)",rp_lang:"اللغة: ",menu_profile:"👤 ملفي الشخصي",menu_sug:"💡 اقتراحات",sg_h:"💡 اقتراح لتحسين الموقع",sg_p:"عندك فكرة أو ميزة عايزها؟ اكتبها وهتوصل لصاحب الموقع.",sg_ph:"اكتب اقتراحك هنا...",sg_send:"إرسال الاقتراح",sg_ok:"وصل اقتراحك، شكراً! 🙏",sg_empty:"اكتب اقتراح الأول",menu_lang:"🌐 English",menu_report:"⚠️ بلّغ عن مشكلة",menu_refresh:"🔄 تحديث",menu_out:"🚪 تسجيل الخروج",
-  pf_h:"ملفي الشخصي",pf_login:"اسم الدخول (ثابت): {0}",pf_name:"الاسم الظاهر",pf_name_ph:"الاسم اللي يظهر للأصدقاء",pf_pick:"📷 اختيار صورة",pf_rm:"حذف الصورة",pf_save:"حفظ",pf_saved:"تم حفظ ملفك ✔",pf_name_err:"الاسم من 1 إلى 30 حرف",pf_img_err:"تعذر قراءة الصورة",pf_note:"الصورة بتتصغر تلقائياً. الاسم الظاهر مش بيغيّر اسم الدخول."},
- en:{title:"🏆 Game of the Year - Friends Vote",login_h:"Log in / Create account",ph_user:"Username (English letters and numbers)",ph_pass:"Password (at least 6 characters)",show_pass:"Show password",login:"Log in",register:"Create new account",
+  pf_h:"ملفي الشخصي",pf_login:"اسم الدخول (ثابت): {0}",pf_name:"الاسم الظاهر",pf_name_ph:"الاسم اللي يظهر للآخرين",pf_pick:"📷 اختيار صورة",pf_rm:"حذف الصورة",pf_save:"حفظ",pf_saved:"تم حفظ ملفك ✔",pf_name_err:"الاسم من 1 إلى 30 حرف",pf_img_err:"تعذر قراءة الصورة",pf_note:"الصورة بتتصغر تلقائياً. الاسم الظاهر مش بيغيّر اسم الدخول.",t_friends:"👥 الأصدقاء",fr_h_in:"طلبات صداقة ({0})",fr_h_out:"طلبات أرسلتها",fr_h_list:"أصدقائي ({0})",fr_search:"ابحث باسم المستخدم أو الاسم",fr_find:"ابحث عن أصدقاء",fr_add:"إضافة",fr_sent:"تم الإرسال",fr_accept:"قبول",fr_decline:"رفض",fr_cancel:"إلغاء",fr_remove:"حذف",fr_friends:"أصدقاء ✔",fr_none:"لسه ما عندكش أصدقاء. ابحث عن أصحابك باسم المستخدم وأضفهم.",fr_nores:"لا توجد نتائج",fr_voted:"صوّت لـ {0}",fr_novote:"لسه ما صوّتش",fr_pick_h:"اختيارات أصدقائي",fr_pick_none:"لما أصدقاؤك يصوتوا هتظهر اختياراتهم هنا.",fr_req_ok:"تم إرسال طلب الصداقة ✔",fr_acc_ok:"تمت الصداقة ✔",fr_confirm:"حذف الصديق؟",fr_you:"أنت",fr_pick_votes:"{0} من أصدقائك"},
+ en:{title:"🏆 Game of the Year: Community Vote",login_h:"Log in / Create account",ph_user:"Username (English letters and numbers)",ph_pass:"Password (at least 6 characters)",show_pass:"Show password",login:"Log in",register:"Create new account",
   err_user:"Username: 3 to 20 English letters, numbers or _",err_pass6:"Password must be at least 6 characters",
   e_exists:"That username is already taken",e_weak:"Weak password (at least 6 characters)",e_bad:"Wrong username or password",e_perm:"Not allowed",e_many:"Too many attempts, wait a bit",e_net:"Connection problem, try again",e_other:"Error: {0}",
   loading:"Loading...",retry:"Try again",out:"Log out",refresh:"Refresh",refreshing:"Refreshing...",offline:"⚠️ No internet connection",
   t_vote:"🗳️ Vote",t_results:"📊 Results",t_reviews:"💬 Reviews",
-  cd_open:"⏳ Time left until voting closes (Dec 10, 4:00 AM Cairo time)",cd_wait:"🎬 Time until The Game Awards ceremony starts (Dec 11, 2:30 AM Cairo time). The friends' winner appears when the ceremony starts.",
+  cd_open:"⏳ Time left until voting closes (Dec 10, 4:00 AM Cairo time)",cd_wait:"🎬 Time until The Game Awards ceremony starts (Dec 11, 2:30 AM Cairo time). The site's Game of the Year appears when the ceremony starts.",
   d:"days",h:"hours",m:"min",s:"sec",
   closed:"🔒 Voting is closed. See the current results in the Results tab.",
   voted_for:"✅ You voted for: {0}",can_change:" (you can change your vote)",not_voted:"You haven't voted yet. Pick a game and vote 👇",
   votes:"{0} votes",vote:"Vote",your_vote:"✔ Your vote",vote_done:"Your vote is saved ✔",
-  invite:"Invite your friends to vote",share_site:"📤 Share the site link",share_res:"📊 Share current results",copied:"Link copied",share_text:"Vote with me for Game of the Year 🏆",
+  invite:"Invite people to vote",share_site:"📤 Share the site link",share_res:"📊 Share current results",copied:"Link copied",share_text:"Vote with me for Game of the Year 🏆",
   res_total:"Total votes: {0}",res_none:"No votes yet",res_tie:"Tie for first place: {0}",res_lead:"Leading: {0}",and:" and ",
-  res_msg:"🏆 Friends' Game of the Year vote results ({0} votes)",res_line:"{0}. {1} - {2} votes",res_join:"Vote with us: ",
+  res_msg:"🏆 Game of the Year vote results ({0} votes)",res_line:"{0}. {1} - {2} votes",res_join:"Vote with us: ",
   rev_all:"All",rev_h:"Latest reviews ({0})",rev_about:"about",rev_you:"you",rev_none:"No reviews yet. Open any game from Vote and write your opinion.",
-  back:"← Back",rev_edit:"Edit your review",rev_write:"Write your review",rev_ph:"What do you think of the game...",rev_save:"Save review",rev_saved:"Review saved ✔",rev_empty:"Write a review",rev_friends:"Friends' reviews ({0})",rev_none2:"No reviews yet",
-  win_h:"🏆 Friends' Game of the Year",win_votes:"{0} votes out of {1}",win_tie:"It's a tie! Friends' Game of the Year: {0}",win_none:"Voting ended with no votes 🤷",win_note:"This is the friends' vote result on this site only, not the official The Game Awards result.",
+  back:"← Back",rev_edit:"Edit your review",rev_write:"Write your review",rev_ph:"What do you think of the game...",rev_save:"Save review",rev_saved:"Review saved ✔",rev_empty:"Write a review",rev_friends:"Reviews ({0})",rev_none2:"No reviews yet",
+  win_h:"🏆 Game of the Year by site vote",win_votes:"{0} votes out of {1}",win_tie:"It's a tie! Game of the Year by site vote: {0}",win_none:"Voting ended with no votes 🤷",win_note:"This is the result of this site's users only, not the official The Game Awards result.",
   notif_btn:"🔔 Enable notifications",notif_on:"🔔 Notifications are on",notif_denied:"Notifications are blocked in the browser settings",notif_ok:"Notifications enabled ✔",notif_ios:"On iPhone: open the site in Safari > Share button > Add to Home Screen, then open it from the icon and enable notifications.",notif_unsup:"This browser does not support notifications",notif_fail:"Could not enable notifications",notif_h:"Get the result as soon as it happens",
   report:"⚠️ Report a problem",rp_h:"⚠️ Report a problem",rp_p:"If something is broken or not working, describe it and send it by email. Browser info is added automatically so it can be fixed.",rp_ph:"Describe the problem (what happened? what were you doing?)",rp_mail:"✉️ Send by email",rp_ce:"📋 Copy email: {0}",rp_cd:"📋 Copy Discord: {0}",rp_close:"Close",rp_cpe:"Email copied",rp_cpd:"Discord name copied",rp_prompt:"Copy from here:",
   rp_subj:"Problem report - Game of the Year vote",rp_issue:"Problem: ",rp_auto:"--- Automatic info ---",rp_user:"User: ",rp_page:"Page: ",rp_tab:"Tab: ",rp_time:"Time: ",rp_br:"Browser: ",rp_scr:"Screen: ",rp_net:"Internet: ",rp_on:"online",rp_off:"offline",rp_err:"Last error: ",rp_noerr:"none",rp_guest:"(not logged in)",rp_lang:"Language: ",menu_profile:"👤 My profile",menu_sug:"💡 Suggestions",sg_h:"💡 Suggest an improvement",sg_p:"Have an idea or a feature you want? Write it and it goes to the site owner.",sg_ph:"Write your suggestion here...",sg_send:"Send suggestion",sg_ok:"Suggestion sent, thanks! 🙏",sg_empty:"Write a suggestion first",menu_lang:"🌐 عربي",menu_report:"⚠️ Report a problem",menu_refresh:"🔄 Refresh",menu_out:"🚪 Log out",
-  pf_h:"My profile",pf_login:"Login name (fixed): {0}",pf_name:"Display name",pf_name_ph:"The name friends see",pf_pick:"📷 Choose photo",pf_rm:"Remove photo",pf_save:"Save",pf_saved:"Profile saved ✔",pf_name_err:"Name must be 1 to 30 characters",pf_img_err:"Could not read the image",pf_note:"The photo is shrunk automatically. Display name does not change your login name."}
+  pf_h:"My profile",pf_login:"Login name (fixed): {0}",pf_name:"Display name",pf_name_ph:"The name others see",pf_pick:"📷 Choose photo",pf_rm:"Remove photo",pf_save:"Save",pf_saved:"Profile saved ✔",pf_name_err:"Name must be 1 to 30 characters",pf_img_err:"Could not read the image",pf_note:"The photo is shrunk automatically. Display name does not change your login name.",t_friends:"👥 Friends",fr_h_in:"Friend requests ({0})",fr_h_out:"Requests I sent",fr_h_list:"My friends ({0})",fr_search:"Search by username or name",fr_find:"Find friends",fr_add:"Add",fr_sent:"Sent",fr_accept:"Accept",fr_decline:"Decline",fr_cancel:"Cancel",fr_remove:"Remove",fr_friends:"Friends ✔",fr_none:"You have no friends yet. Search by username and add people you know.",fr_nores:"No results",fr_voted:"Voted for {0}",fr_novote:"Hasn't voted yet",fr_pick_h:"My friends' picks",fr_pick_none:"When your friends vote, their picks show up here.",fr_req_ok:"Friend request sent ✔",fr_acc_ok:"You are now friends ✔",fr_confirm:"Remove this friend?",fr_you:"You",fr_pick_votes:"{0} of your friends"}
 };
 let lang = localStorage.getItem("goty_lang") || ((navigator.language||"ar").toLowerCase().startsWith("ar") ? "ar" : "en");
 const t = (k,...a) => (TR[lang][k] ?? TR.ar[k] ?? k).replace(/\{(\d)\}/g,(_,i)=>a[i]);
@@ -180,7 +194,7 @@ window.addEventListener("error",e=>{lastErr=(e.message||"")+" @"+(e.lineno||"")}
 window.addEventListener("unhandledrejection",e=>{lastErr="promise: "+(e.reason&&(e.reason.code||e.reason.message)||e.reason)});
 const syncOff=()=>{$("#off").style.display=navigator.onLine?"none":"block"};
 addEventListener("online",syncOff);addEventListener("offline",syncOff);
-let me=null, username="", profile={}, users={}, pendingName="", tab="vote", data=null, timer=null, rfilter="";
+let fr=[], fq="", me=null, username="", profile={}, users={}, pendingName="", tab="vote", data=null, timer=null, rfilter="";
 
 function art(g){
   const initials=g.name.split(/\s+/).map(w=>w[0]).join("").slice(0,3).toUpperCase();
@@ -273,7 +287,7 @@ function sugView(){
   $("#sgs").onclick=async()=>{const x=$("#sgt").value.trim();if(!x){$("#sgm").textContent=t("sg_empty");return}
     $("#sgs").disabled=true;
     const n=(+localStorage.getItem("goty_sg")||0)%5+1;
-    try{await setDoc(doc(db,"suggestions",me.uid+"_"+n),{uid:me.uid,username,text:x,ts:serverTimestamp()});localStorage.setItem("goty_sg",n);$("#modal").innerHTML="";toast(t("sg_ok"))}
+    try{await setDoc(doc(db,"suggestions",me.uid+"_"+n),{uid:me.uid,username,text:x,ts:serverTimestamp()});localStorage.setItem("goty_sg",n);mailSuggestion(x);$("#modal").innerHTML="";toast(t("sg_ok"))}
     catch(e){$("#sgm").textContent=errText(e);$("#sgs").disabled=false}};
 }
 function profileView(){
@@ -341,6 +355,9 @@ function loginView(){
 async function load(){
   const [vs,rs,us]=await Promise.all([getDocs(collection(db,"votes")),getDocs(collection(db,"reviews")),getDocs(collection(db,"users"))]);
   users={};us.forEach(d=>users[d.id]=d.data());
+  fr=[];
+  try{const [a,b]=await Promise.all([getDocs(query(collection(db,"friendships"),where("from","==",me.uid))),getDocs(query(collection(db,"friendships"),where("to","==",me.uid)))]);
+    a.forEach(d=>fr.push({id:d.id,...d.data()}));b.forEach(d=>fr.push({id:d.id,...d.data()}))}catch(e){lastErr="friends: "+(e.code||e.message)}
   if(me&&users[me.uid])profile=users[me.uid];
   const votes=[],reviews=[];
   vs.forEach(d=>votes.push({uid:d.id,...d.data()}));
@@ -364,7 +381,8 @@ function shell(inner){
   $("#app").innerHTML=`<div class="tabs">
    <button data-t="vote" class="${tab==="vote"?"on":""}">${t("t_vote")}</button>
    <button data-t="results" class="${tab==="results"?"on":""}">${t("t_results")}</button>
-   <button data-t="reviews" class="${tab==="reviews"?"on":""}">${t("t_reviews")}</button></div>`+winnerBanner()+inner+footer();
+   <button data-t="reviews" class="${tab==="reviews"?"on":""}">${t("t_reviews")}</button>
+   <button data-t="friends" class="${tab==="friends"?"on":""}">${t("t_friends")}${incoming().length?`<span class="dot">${incoming().length}</span>`:""}</button></div>`+winnerBanner()+inner+footer();
   bindFooter();
   document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
 }
@@ -394,7 +412,7 @@ async function render(){
   clearInterval(timer);
   if(!data){$("#app").innerHTML=`<div class="spin">${t("loading")}</div>`;
     try{await load()}catch(e){$("#app").innerHTML=`<div class="card"><div class="msg">${esc(errText(e))}</div><button id="retry">${t("retry")}</button></div>`;$("#retry").onclick=render;return}}
-  if(tab==="results")resultsView();else if(tab==="reviews")reviewsView();else homeView();
+  if(tab==="results")resultsView();else if(tab==="reviews")reviewsView();else if(tab==="friends")friendsView();else homeView();
   if(phase()!=="ceremony"&&$("#cd-s")){tick();timer=setInterval(tick,1000)}
   scheduleRollover();
 }
@@ -462,6 +480,50 @@ function reviewsView(){
   document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{rfilter=b.dataset.f;reviewsView()});
 }
 
+const pid=(a,b)=>a<b?a+"_"+b:b+"_"+a;
+const incoming=()=>fr.filter(f=>f.status==="pending"&&f.to===me.uid);
+const outgoing=()=>fr.filter(f=>f.status==="pending"&&f.from===me.uid);
+const friendIds=()=>fr.filter(f=>f.status==="accepted").map(f=>f.from===me.uid?f.to:f.from);
+const relWith=u=>fr.find(f=>(f.from===me.uid&&f.to===u)||(f.to===me.uid&&f.from===u));
+const voteOf=u=>data.votes.find(v=>v.uid===u)?.game||null;
+const gname=id=>{const g=GAMES.find(x=>x.id===id);return g?g.name:"?"};
+function frRow(uid,btns,extra){
+  return `<div class="frow">${avatar(uid,"")}<div class="grow"><b>${esc(dname(uid,""))}</b><div class="small" dir="ltr" style="text-align:start">@${esc((users[uid]||{}).username||"")}</div>${extra||""}</div>${btns}</div>`;
+}
+async function frAct(fn,okMsg){
+  try{await fn();if(okMsg)toast(okMsg);await refresh()}catch(e){alert(errText(e));render()}
+}
+function searchHTML(){
+  const q=fq.trim().toLowerCase();
+  if(q.length<2)return "";
+  const res=Object.keys(users).filter(u=>u!==me.uid&&((users[u].username||"").toLowerCase().includes(q)||(users[u].displayName||"").toLowerCase().includes(q))).slice(0,8);
+  if(!res.length)return `<div class="small" style="padding:8px 0">${t("fr_nores")}</div>`;
+  return res.map(u=>{const r=relWith(u);let b;
+    if(!r)b=`<button data-fadd="${u}">${t("fr_add")}</button>`;
+    else if(r.status==="accepted")b=`<span class="small">${t("fr_friends")}</span>`;
+    else if(r.from===me.uid)b=`<span class="small">${t("fr_sent")}</span>`;
+    else b=`<button data-facc="${r.id}">${t("fr_accept")}</button>`;
+    return frRow(u,b)}).join("");
+}
+function bindFriends(){
+  document.querySelectorAll("[data-fadd]").forEach(b=>b.onclick=()=>{b.disabled=true;frAct(()=>setDoc(doc(db,"friendships",pid(me.uid,b.dataset.fadd)),{from:me.uid,to:b.dataset.fadd,status:"pending",ts:serverTimestamp()}),t("fr_req_ok"))});
+  document.querySelectorAll("[data-facc]").forEach(b=>b.onclick=()=>{b.disabled=true;frAct(()=>updateDoc(doc(db,"friendships",b.dataset.facc),{status:"accepted"}),t("fr_acc_ok"))});
+  document.querySelectorAll("[data-fdel]").forEach(b=>b.onclick=()=>{if(b.dataset.confirm&&!confirm(t("fr_confirm")))return;b.disabled=true;frAct(()=>deleteDoc(doc(db,"friendships",b.dataset.fdel)))});
+}
+function friendsView(){
+  const inc=incoming(),out=outgoing(),fids=friendIds();
+  const pc={};fids.forEach(u=>{const v=voteOf(u);if(v)pc[v]=(pc[v]||0)+1});
+  const picks=GAMES.filter(g=>pc[g.id]).sort((a,b)=>pc[b.id]-pc[a.id]);
+  const frOf=u=>fr.find(f=>f.status==="accepted"&&(f.from===u||f.to===u));
+  shell(`<div class="card"><b>${t("fr_find")}</b><input id="fq" value="${esc(fq)}" placeholder="${t("fr_search")}" dir="auto" autocomplete="off"><div id="fsr">${searchHTML()}</div></div>`+
+   (inc.length?`<div class="card"><b>${t("fr_h_in",inc.length)}</b>${inc.map(f=>frRow(f.from,`<button data-facc="${f.id}">${t("fr_accept")}</button><button class="sec" data-fdel="${f.id}">${t("fr_decline")}</button>`)).join("")}</div>`:"")+
+   `<div class="card"><b>${t("fr_pick_h")}</b>${picks.length?picks.map(g=>`<div class="rank"><div class="n" style="font-size:16px">${pc[g.id]}</div>${art(g)}<div class="info"><b class="nm">${esc(g.name)}</b></div></div>`).join(""):`<div class="small" style="margin-top:6px">${t("fr_pick_none")}</div>`}</div>`+
+   `<div class="card"><b>${t("fr_h_list",fids.length)}</b>${fids.length?fids.map(u=>{const v=voteOf(u);return frRow(u,`<button class="sec" data-fdel="${frOf(u).id}" data-confirm="1">${t("fr_remove")}</button>`,`<div class="small">${v?t("fr_voted",bdi(gname(v))):t("fr_novote")}</div>`)}).join(""):`<div class="small" style="margin-top:6px">${t("fr_none")}</div>`}</div>`+
+   (out.length?`<div class="card"><b>${t("fr_h_out")}</b>${out.map(f=>frRow(f.to,`<button class="sec" data-fdel="${f.id}">${t("fr_cancel")}</button>`)).join("")}</div>`:""));
+  getDocs(collection(db,"users")).then(us=>{const nu={};us.forEach(d=>nu[d.id]=d.data());users=nu;if(me&&users[me.uid])profile=users[me.uid];const e=$("#fsr");if(e&&tab==="friends"){e.innerHTML=searchHTML();bindFriends()}}).catch(()=>{});
+  bindFriends();
+  $("#fq").oninput=e=>{fq=e.target.value;$("#fsr").innerHTML=searchHTML();bindFriends()};
+}
 function gameView(id){
   const g=GAMES.find(x=>x.id===id);
   const list=data.reviews.filter(r=>r.game===id),mineR=list.find(r=>r.uid===me.uid);
