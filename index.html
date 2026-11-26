@@ -27,7 +27,22 @@ button.voted{background:linear-gradient(135deg,#3ddc84,#1fa860);animation:pop .5
 @keyframes rp{to{transform:scale(4);opacity:0}}
 .msg{color:#ff8a8a;min-height:20px}
 .ok{color:#8aff9a}
-.nm{display:block;direction:ltr;text-align:right;unicode-bidi:isolate}
+.nm{display:block;direction:ltr;unicode-bidi:isolate}
+html[dir=rtl] .nm{text-align:right}
+html[dir=ltr] .nm{text-align:left}
+.win{background:linear-gradient(135deg,#3a2c05,#7a5a0a);border:2px solid #f3c63a;text-align:center;animation:glow 2s ease-in-out infinite alternate}
+@keyframes glow{from{box-shadow:0 0 8px #f3c63a55}to{box-shadow:0 0 28px #f3c63acc}}
+.win .cover{width:120px;height:160px;margin:8px auto;display:block}
+.win .ph{width:120px;height:160px;margin:8px auto}
+.win h2{margin:4px 0;color:#f3d66a}
+.av{width:30px;height:30px;border-radius:50%;object-fit:cover;background:#3a3a55;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;vertical-align:middle;margin-inline-end:6px;flex:none;color:#fff;overflow:hidden}
+.av.big{width:84px;height:84px;font-size:32px;margin:6px auto;display:flex}
+.menubtn{width:auto!important;padding:4px 12px!important;margin:0!important;font-size:20px;line-height:1.2}
+.menu{position:absolute;top:50px;inset-inline-end:10px;background:#252538;border:1px solid #3a3a55;border-radius:12px;min-width:210px;padding:6px;z-index:30;animation:rise .2s ease;box-shadow:0 10px 30px #000a}
+.menu button{background:transparent;color:#eee;text-align:start;font-weight:normal;margin:0;padding:11px;border-radius:8px}
+.menu button:hover{background:#34344d;transform:none;box-shadow:none;filter:none}
+.hd{display:flex;align-items:center;gap:6px}
+.lang{width:auto!important;padding:6px 10px!important;margin:0!important}
 .small{color:#aaa;font-size:13px}
 .tabs{display:flex;gap:6px;margin:6px 0}
 .tabs button{margin:0;background:#232336;color:#ccc;font-weight:normal;padding:9px 4px;font-size:14px}
@@ -68,12 +83,14 @@ a{color:#e8b923;cursor:pointer}
 <body>
 <header><h1>🏆 لعبة العام - تصويت الأصدقاء</h1><div id="who"></div></header>
 <div id="off" class="off" style="display:none">⚠️ لا يوجد اتصال بالإنترنت</div>
-<main id="app"><div class="spin">جارٍ التحميل...</div></main>
+<main id="app"><div class="spin">...</div></main>
+
 <div id="modal"></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
 import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import {getFirestore,doc,setDoc,getDoc,getDocs,collection,serverTimestamp} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+import {getMessaging,getToken,onMessage,isSupported} from "https://www.gstatic.com/firebasejs/12.0.0/firebase-messaging.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDaFa5oEOERPkiFkFE05nEWX2OAqvaUUd0",
@@ -83,20 +100,77 @@ const firebaseConfig = {
   messagingSenderId: "501020461143",
   appId: "1:501020461143:web:bc40f4601c8c95a7cd7b12"
 };
+// مفتاح الإشعارات (VAPID): Project settings > Cloud Messaging > Web Push certificates > Generate key pair
+const VAPID_KEY = "PASTE_VAPID_KEY";
+const EMU = false;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app), db = getFirestore(app);
 
-// آخر موعد للتصويت: 10 ديسمبر 2026 الساعة 4 الفجر بتوقيت القاهرة (= 02:00 UTC)
-const DEADLINE = Date.UTC(2026,11,10,2,0,0);
+// ===== المواعيد (UTC) =====
+// قفل التصويت: 10 ديسمبر 2026 الساعة 4 الفجر بتوقيت القاهرة = 02:00 UTC (نفس موعد قفل تصويت الجمهور الرسمي)
+const CLOSE = Date.UTC(2026,11,10,2,0,0);
+// بداية حفل The Game Awards: الخميس 10 ديسمبر 4:30 م توقيت لوس أنجلوس = 11 ديسمبر 02:30 بتوقيت القاهرة (= 00:30 UTC)
+const CEREMONY = Date.UTC(2026,11,11,0,30,0);
+const now = () => Date.now();
+
+const EMAIL="belalshino38@gmail.com", DISCORD="belal57544";
 const W = "https://upload.wikimedia.org/wikipedia/en/thumb/";
 const GAMES = [
- {id:"007",name:"007 First Light",dev:"IO Interactive",c:"#1b3a5c",img:W+"2/2b/007_First_Light_%282026%29_cover.jpg/250px-007_First_Light_%282026%29_cover.jpg"},
- {id:"control",name:"Control Resonant",dev:"Remedy / Annapurna",c:"#6b1d2e",img:W+"a/a1/Control_Resonant_cover_art.png/250px-Control_Resonant_cover_art.png"},
- {id:"gta6",name:"Grand Theft Auto VI",dev:"Rockstar Games",c:"#7a3b8f",img:W+"4/46/Grand_Theft_Auto_VI.png/250px-Grand_Theft_Auto_VI.png"},
- {id:"phantom",name:"Phantom Blade Zero",dev:"S-GAME",c:"#7a2a1a",img:W+"4/41/Phantom_Blade_Zero_cover_art.jpg/250px-Phantom_Blade_Zero_cover_art.jpg"},
- {id:"re",name:"Resident Evil Requiem",dev:"Capcom",c:"#3a3a3a",img:W+"1/15/Resident_Evil_Requiem_Cover_Art.jpg/250px-Resident_Evil_Requiem_Cover_Art.jpg"},
- {id:"zelda",name:"The Legend of Zelda: Ocarina of Time",dev:"Nintendo",c:"#1f6b3a",img:W+"5/57/The_Legend_of_Zelda_Ocarina_of_Time.jpg/250px-The_Legend_of_Zelda_Ocarina_of_Time.jpg"}
+ {id:"007",name:"007 First Light",dev:"IO Interactive",c:"#1b3a5c",short:"007",img:W+"2/2b/007_First_Light_%282026%29_cover.jpg/250px-007_First_Light_%282026%29_cover.jpg"},
+ {id:"control",name:"Control Resonant",dev:"Remedy / Annapurna",c:"#6b1d2e",short:"Control",img:W+"a/a1/Control_Resonant_cover_art.png/250px-Control_Resonant_cover_art.png"},
+ {id:"gta6",name:"Grand Theft Auto VI",dev:"Rockstar Games",c:"#7a3b8f",short:"GTA VI",img:W+"4/46/Grand_Theft_Auto_VI.png/250px-Grand_Theft_Auto_VI.png"},
+ {id:"phantom",name:"Phantom Blade Zero",dev:"S-GAME",c:"#7a2a1a",short:"Phantom Blade",img:W+"4/41/Phantom_Blade_Zero_cover_art.jpg/250px-Phantom_Blade_Zero_cover_art.jpg"},
+ {id:"re",name:"Resident Evil Requiem",dev:"Capcom",c:"#3a3a3a",short:"Resident Evil",img:W+"1/15/Resident_Evil_Requiem_Cover_Art.jpg/250px-Resident_Evil_Requiem_Cover_Art.jpg"},
+ {id:"zelda",name:"The Legend of Zelda: Ocarina of Time",dev:"Nintendo",c:"#1f6b3a",short:"Zelda OoT",img:W+"5/57/The_Legend_of_Zelda_Ocarina_of_Time.jpg/250px-The_Legend_of_Zelda_Ocarina_of_Time.jpg"}
 ];
+
+// ===== اللغات =====
+const TR = {
+ ar:{title:"🏆 لعبة العام - تصويت الأصدقاء",login_h:"تسجيل الدخول / حساب جديد",ph_user:"اسم المستخدم (حروف إنجليزي وأرقام)",ph_pass:"كلمة السر (6 حروف على الأقل)",show_pass:"إظهار كلمة السر",login:"دخول",register:"إنشاء حساب جديد",
+  err_user:"اسم المستخدم: 3 إلى 20 حرف إنجليزي أو أرقام أو _",err_pass6:"كلمة السر 6 حروف على الأقل",
+  e_exists:"اسم المستخدم مستخدم بالفعل",e_weak:"كلمة السر ضعيفة (6 حروف على الأقل)",e_bad:"اسم المستخدم أو كلمة السر غلط",e_perm:"غير مسموح",e_many:"محاولات كثيرة، استنى شوية",e_net:"مشكلة في الإنترنت، جرّب تاني",e_other:"حصل خطأ: {0}",
+  loading:"جارٍ التحميل...",retry:"إعادة المحاولة",out:"خروج",refresh:"تحديث",refreshing:"جارٍ التحديث...",offline:"⚠️ لا يوجد اتصال بالإنترنت",
+  t_vote:"🗳️ التصويت",t_results:"📊 النتائج",t_reviews:"💬 التقييمات",
+  cd_open:"⏳ باقي على قفل التصويت (10 ديسمبر الساعة 4 الفجر بتوقيت القاهرة)",cd_wait:"🎬 باقي على بداية حفل The Game Awards (11 ديسمبر الساعة 2:30 فجراً بتوقيت القاهرة). سيظهر فائز الأصدقاء مع بداية الحفل.",
+  d:"يوم",h:"ساعة",m:"دقيقة",s:"ثانية",
+  closed:"🔒 انتهى التصويت. تقدر تشوف النتائج الحالية في تبويب النتائج.",
+  voted_for:"✅ صوتّ لـ: {0}",can_change:" (تقدر تغيّر صوتك)",not_voted:"لسه ما صوتّش. اختار لعبة وصوّت 👇",
+  votes:"{0} صوت",vote:"صوّت",your_vote:"✔ صوتك",vote_done:"تم تسجيل صوتك ✔",
+  invite:"ادعو أصحابك للتصويت",share_site:"📤 شارك رابط الموقع",share_res:"📊 شارك النتائج الحالية",copied:"تم نسخ الرابط",share_text:"صوّت معايا على لعبة العام 🏆",
+  res_total:"إجمالي الأصوات: {0}",res_none:"لا توجد أصوات بعد",res_tie:"تعادل في الصدارة بين {0}",res_lead:"المتصدر: {0}",and:" و ",
+  res_msg:"🏆 نتائج تصويت لعبة العام بين الأصحاب ({0} صوت)",res_line:"{0}. {1} - {2} صوت",res_join:"صوّت معانا: ",
+  rev_all:"الكل",rev_h:"آخر التقييمات ({0})",rev_about:"عن",rev_you:"أنت",rev_none:"لا توجد تقييمات بعد. افتح أي لعبة من التصويت واكتب رأيك.",
+  back:"← رجوع",rev_edit:"عدّل تقييمك",rev_write:"اكتب تقييمك",rev_ph:"رأيك في اللعبة...",rev_save:"حفظ التقييم",rev_saved:"تم حفظ تقييمك ✔",rev_empty:"اكتب تقييم",rev_friends:"تقييمات الأصدقاء ({0})",rev_none2:"لا توجد تقييمات بعد",
+  win_h:"🏆 لعبة العام بين الأصدقاء",win_votes:"{0} صوت من {1}",win_tie:"تعادل! لعبة العام بين الأصدقاء: {0}",win_none:"انتهى التصويت بدون أي أصوات 🤷",win_note:"هذه نتيجة تصويت الأصدقاء في هذا الموقع فقط، وليست النتيجة الرسمية لـ The Game Awards.",
+  notif_btn:"🔔 فعّل الإشعارات",notif_on:"🔔 الإشعارات مفعّلة",notif_denied:"الإشعارات محظورة من إعدادات المتصفح",notif_ok:"تم تفعيل الإشعارات ✔",notif_ios:"على الآيفون: افتح الموقع من Safari > زر المشاركة > إضافة إلى الشاشة الرئيسية، ثم افتحه من الأيقونة وفعّل الإشعارات.",notif_unsup:"المتصفح ده لا يدعم الإشعارات",notif_fail:"تعذر تفعيل الإشعارات",notif_h:"اعرف النتيجة أول بأول",
+  report:"⚠️ بلّغ عن مشكلة",rp_h:"⚠️ بلّغ عن مشكلة",rp_p:"لو في خطأ أو حاجة مش شغالة، اكتب المشكلة وابعتها على الإيميل. هنضيف معلومات المتصفح تلقائياً عشان نعرف نصلحها.",rp_ph:"اوصف المشكلة (إيه اللي حصل؟ كنت بتعمل إيه؟)",rp_mail:"✉️ ابعت على الإيميل",rp_ce:"📋 نسخ الإيميل: {0}",rp_cd:"📋 نسخ ديسكورد: {0}",rp_close:"إغلاق",rp_cpe:"تم نسخ الإيميل",rp_cpd:"تم نسخ اسم ديسكورد",rp_prompt:"انسخ من هنا:",
+  rp_subj:"بلاغ مشكلة - تصويت لعبة العام",rp_issue:"المشكلة: ",rp_auto:"--- معلومات تلقائية ---",rp_user:"المستخدم: ",rp_page:"الصفحة: ",rp_tab:"التبويب: ",rp_time:"الوقت: ",rp_br:"المتصفح: ",rp_scr:"الشاشة: ",rp_net:"الإنترنت: ",rp_on:"متصل",rp_off:"غير متصل",rp_err:"آخر خطأ: ",rp_noerr:"لا يوجد",rp_guest:"(غير مسجل)",rp_lang:"اللغة: ",menu_profile:"👤 ملفي الشخصي",menu_sug:"💡 اقتراحات",sg_h:"💡 اقتراح لتحسين الموقع",sg_p:"عندك فكرة أو ميزة عايزها؟ اكتبها وهتوصل لصاحب الموقع.",sg_ph:"اكتب اقتراحك هنا...",sg_send:"إرسال الاقتراح",sg_ok:"وصل اقتراحك، شكراً! 🙏",sg_empty:"اكتب اقتراح الأول",menu_lang:"🌐 English",menu_report:"⚠️ بلّغ عن مشكلة",menu_refresh:"🔄 تحديث",menu_out:"🚪 تسجيل الخروج",
+  pf_h:"ملفي الشخصي",pf_login:"اسم الدخول (ثابت): {0}",pf_name:"الاسم الظاهر",pf_name_ph:"الاسم اللي يظهر للأصدقاء",pf_pick:"📷 اختيار صورة",pf_rm:"حذف الصورة",pf_save:"حفظ",pf_saved:"تم حفظ ملفك ✔",pf_name_err:"الاسم من 1 إلى 30 حرف",pf_img_err:"تعذر قراءة الصورة",pf_note:"الصورة بتتصغر تلقائياً. الاسم الظاهر مش بيغيّر اسم الدخول."},
+ en:{title:"🏆 Game of the Year - Friends Vote",login_h:"Log in / Create account",ph_user:"Username (English letters and numbers)",ph_pass:"Password (at least 6 characters)",show_pass:"Show password",login:"Log in",register:"Create new account",
+  err_user:"Username: 3 to 20 English letters, numbers or _",err_pass6:"Password must be at least 6 characters",
+  e_exists:"That username is already taken",e_weak:"Weak password (at least 6 characters)",e_bad:"Wrong username or password",e_perm:"Not allowed",e_many:"Too many attempts, wait a bit",e_net:"Connection problem, try again",e_other:"Error: {0}",
+  loading:"Loading...",retry:"Try again",out:"Log out",refresh:"Refresh",refreshing:"Refreshing...",offline:"⚠️ No internet connection",
+  t_vote:"🗳️ Vote",t_results:"📊 Results",t_reviews:"💬 Reviews",
+  cd_open:"⏳ Time left until voting closes (Dec 10, 4:00 AM Cairo time)",cd_wait:"🎬 Time until The Game Awards ceremony starts (Dec 11, 2:30 AM Cairo time). The friends' winner appears when the ceremony starts.",
+  d:"days",h:"hours",m:"min",s:"sec",
+  closed:"🔒 Voting is closed. See the current results in the Results tab.",
+  voted_for:"✅ You voted for: {0}",can_change:" (you can change your vote)",not_voted:"You haven't voted yet. Pick a game and vote 👇",
+  votes:"{0} votes",vote:"Vote",your_vote:"✔ Your vote",vote_done:"Your vote is saved ✔",
+  invite:"Invite your friends to vote",share_site:"📤 Share the site link",share_res:"📊 Share current results",copied:"Link copied",share_text:"Vote with me for Game of the Year 🏆",
+  res_total:"Total votes: {0}",res_none:"No votes yet",res_tie:"Tie for first place: {0}",res_lead:"Leading: {0}",and:" and ",
+  res_msg:"🏆 Friends' Game of the Year vote results ({0} votes)",res_line:"{0}. {1} - {2} votes",res_join:"Vote with us: ",
+  rev_all:"All",rev_h:"Latest reviews ({0})",rev_about:"about",rev_you:"you",rev_none:"No reviews yet. Open any game from Vote and write your opinion.",
+  back:"← Back",rev_edit:"Edit your review",rev_write:"Write your review",rev_ph:"What do you think of the game...",rev_save:"Save review",rev_saved:"Review saved ✔",rev_empty:"Write a review",rev_friends:"Friends' reviews ({0})",rev_none2:"No reviews yet",
+  win_h:"🏆 Friends' Game of the Year",win_votes:"{0} votes out of {1}",win_tie:"It's a tie! Friends' Game of the Year: {0}",win_none:"Voting ended with no votes 🤷",win_note:"This is the friends' vote result on this site only, not the official The Game Awards result.",
+  notif_btn:"🔔 Enable notifications",notif_on:"🔔 Notifications are on",notif_denied:"Notifications are blocked in the browser settings",notif_ok:"Notifications enabled ✔",notif_ios:"On iPhone: open the site in Safari > Share button > Add to Home Screen, then open it from the icon and enable notifications.",notif_unsup:"This browser does not support notifications",notif_fail:"Could not enable notifications",notif_h:"Get the result as soon as it happens",
+  report:"⚠️ Report a problem",rp_h:"⚠️ Report a problem",rp_p:"If something is broken or not working, describe it and send it by email. Browser info is added automatically so it can be fixed.",rp_ph:"Describe the problem (what happened? what were you doing?)",rp_mail:"✉️ Send by email",rp_ce:"📋 Copy email: {0}",rp_cd:"📋 Copy Discord: {0}",rp_close:"Close",rp_cpe:"Email copied",rp_cpd:"Discord name copied",rp_prompt:"Copy from here:",
+  rp_subj:"Problem report - Game of the Year vote",rp_issue:"Problem: ",rp_auto:"--- Automatic info ---",rp_user:"User: ",rp_page:"Page: ",rp_tab:"Tab: ",rp_time:"Time: ",rp_br:"Browser: ",rp_scr:"Screen: ",rp_net:"Internet: ",rp_on:"online",rp_off:"offline",rp_err:"Last error: ",rp_noerr:"none",rp_guest:"(not logged in)",rp_lang:"Language: ",menu_profile:"👤 My profile",menu_sug:"💡 Suggestions",sg_h:"💡 Suggest an improvement",sg_p:"Have an idea or a feature you want? Write it and it goes to the site owner.",sg_ph:"Write your suggestion here...",sg_send:"Send suggestion",sg_ok:"Suggestion sent, thanks! 🙏",sg_empty:"Write a suggestion first",menu_lang:"🌐 عربي",menu_report:"⚠️ Report a problem",menu_refresh:"🔄 Refresh",menu_out:"🚪 Log out",
+  pf_h:"My profile",pf_login:"Login name (fixed): {0}",pf_name:"Display name",pf_name_ph:"The name friends see",pf_pick:"📷 Choose photo",pf_rm:"Remove photo",pf_save:"Save",pf_saved:"Profile saved ✔",pf_name_err:"Name must be 1 to 30 characters",pf_img_err:"Could not read the image",pf_note:"The photo is shrunk automatically. Display name does not change your login name."}
+};
+let lang = localStorage.getItem("goty_lang") || ((navigator.language||"ar").toLowerCase().startsWith("ar") ? "ar" : "en");
+const t = (k,...a) => (TR[lang][k] ?? TR.ar[k] ?? k).replace(/\{(\d)\}/g,(_,i)=>a[i]);
+function applyLang(){document.documentElement.lang=lang;document.documentElement.dir=lang==="ar"?"rtl":"ltr";document.title=t("title").replace("🏆 ","");document.querySelector("h1").textContent=t("title");$("#off").textContent=t("offline")}
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const mail = u => u.toLowerCase()+"@goty.app";
@@ -105,79 +179,169 @@ let lastErr="";
 window.addEventListener("error",e=>{lastErr=(e.message||"")+" @"+(e.lineno||"")});
 window.addEventListener("unhandledrejection",e=>{lastErr="promise: "+(e.reason&&(e.reason.code||e.reason.message)||e.reason)});
 const syncOff=()=>{$("#off").style.display=navigator.onLine?"none":"block"};
-addEventListener("online",syncOff);addEventListener("offline",syncOff);syncOff();
-const EMAIL="belalshino38@gmail.com",DISCORD="belal57544";
-async function copy(t,ok){try{await navigator.clipboard.writeText(t);toast(ok)}catch(e){prompt("انسخ من هنا:",t)}}
-function reportView(){
-  $("#modal").innerHTML=`<div class="modal" id="mbg"><div class="sheet"><h3 style="margin:0 0 6px">⚠️ بلّغ عن مشكلة</h3>
-  <div class="small">لو في خطأ أو حاجة مش شغالة، اكتب المشكلة وابعتها على الإيميل. هنضيف معلومات المتصفح تلقائياً عشان نعرف نصلحها.</div>
-  <textarea id="rt" rows="4" maxlength="800" placeholder="اوصف المشكلة (إيه اللي حصل؟ كنت بتعمل إيه؟)"></textarea>
-  <a class="btn" id="rmail" href="#">✉️ ابعت على الإيميل</a>
-  <button id="rcopyE" class="sec" style="width:100%;margin:6px 0">📋 نسخ الإيميل: ${EMAIL}</button>
-  <button id="rcopyD" class="sec" style="width:100%;margin:6px 0">📋 نسخ ديسكورد: ${DISCORD}</button>
-  <button id="rclose" class="sec" style="width:100%;margin:6px 0">إغلاق</button></div></div>`;
-  const info=()=>"المشكلة: "+$("#rt").value.trim()+"\n\n--- معلومات تلقائية ---\nالمستخدم: "+(username||"(غير مسجل)")+"\nالصفحة: "+location.href+"\nالتبويب: "+tab+"\nالوقت: "+new Date().toString()+"\nالمتصفح: "+navigator.userAgent+"\nالشاشة: "+innerWidth+"x"+innerHeight+"\nالإنترنت: "+(navigator.onLine?"متصل":"غير متصل")+"\nآخر خطأ: "+(lastErr||"لا يوجد");
-  const upd=()=>{$("#rmail").href="mailto:"+EMAIL+"?subject="+encodeURIComponent("بلاغ مشكلة - تصويت لعبة العام")+"&body="+encodeURIComponent(info())};
-  upd();$("#rt").oninput=upd;
-  $("#rmail").onclick=upd;
-  $("#rcopyE").onclick=()=>copy(EMAIL,"تم نسخ الإيميل");
-  $("#rcopyD").onclick=()=>copy(DISCORD,"تم نسخ اسم ديسكورد");
-  $("#rclose").onclick=()=>{$("#modal").innerHTML=""};
-  $("#mbg").onclick=e=>{if(e.target.id==="mbg")$("#modal").innerHTML=""};
-}
-function footer(){return `<div class="foot"><button id="report">⚠️ بلّغ عن مشكلة</button></div>`}
-function bindFooter(){const b=$("#report");if(b)b.onclick=reportView}
-let me=null, username="", pendingName="", tab="vote", data=null, timer=null;
+addEventListener("online",syncOff);addEventListener("offline",syncOff);
+let me=null, username="", profile={}, users={}, pendingName="", tab="vote", data=null, timer=null, rfilter="";
 
 function art(g){
   const initials=g.name.split(/\s+/).map(w=>w[0]).join("").slice(0,3).toUpperCase();
   return `<img class="cover" loading="lazy" referrerpolicy="no-referrer" alt="${esc(g.name)}" src="${g.img}" data-ph="${g.id}"><div class="ph" style="display:none;background:linear-gradient(135deg,${g.c},#111)">${esc(initials)}</div>`;
 }
-document.addEventListener("error",e=>{const t=e.target;if(t.tagName==="IMG"&&t.dataset.ph){t.style.display="none";t.nextElementSibling.style.display="flex"}},true);
-// تأثير الموجة على الأزرار
+document.addEventListener("error",e=>{const x=e.target;if(x.tagName==="IMG"&&x.dataset.ph){x.style.display="none";x.nextElementSibling.style.display="flex"}},true);
 document.addEventListener("pointerdown",e=>{const b=e.target.closest("button");if(!b||b.disabled)return;
   const r=b.getBoundingClientRect(),s=Math.max(r.width,r.height),d=document.createElement("span");
   d.className="ripple";d.style.width=d.style.height=s+"px";d.style.left=(e.clientX-r.left-s/2)+"px";d.style.top=(e.clientY-r.top-s/2)+"px";
   b.appendChild(d);setTimeout(()=>d.remove(),600)});
-function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
+function toast(x){const d=document.createElement("div");d.className="toast";d.textContent=x;document.body.appendChild(d);setTimeout(()=>d.remove(),2600)}
 function errText(e){
   const c=e.code||"";
-  if(c.includes("email-already")) return "اسم المستخدم مستخدم بالفعل";
-  if(c.includes("weak-password")) return "كلمة السر ضعيفة (6 حروف على الأقل)";
-  if(c.includes("invalid-credential")||c.includes("wrong-password")||c.includes("user-not-found")) return "اسم المستخدم أو كلمة السر غلط";
-  if(c.includes("permission")) return "غير مسموح";
-  if(c.includes("too-many")) return "محاولات كثيرة، استنى شوية";
-  if(c.includes("network")||c.includes("unavailable")) return "مشكلة في الإنترنت، جرّب تاني";
-  return "حصل خطأ: "+(c||e.message);
+  if(c.includes("email-already")) return t("e_exists");
+  if(c.includes("weak-password")) return t("e_weak");
+  if(c.includes("invalid-credential")||c.includes("wrong-password")||c.includes("user-not-found")) return t("e_bad");
+  if(c.includes("permission")) return t("e_perm");
+  if(c.includes("too-many")) return t("e_many");
+  if(c.includes("network")||c.includes("unavailable")) return t("e_net");
+  return t("e_other",c||e.message);
 }
-function closed(){return Date.now()>=DEADLINE}
+const phase=()=>{const n=now();return n<CLOSE?"open":(n<CEREMONY?"closed":"ceremony")};
+async function copy(x,ok){try{await navigator.clipboard.writeText(x);toast(ok)}catch(e){prompt(t("rp_prompt"),x)}}
 
+// ===== الإشعارات =====
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent), standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+async function enablePush(){
+  try{
+    if(isIOS&&!standalone){alert(t("notif_ios"));return}
+    if(!(await isSupported())||!("Notification" in window)){toast(t("notif_unsup"));return}
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted"){toast(t("notif_denied"));return}
+    const reg=await navigator.serviceWorker.register("./firebase-messaging-sw.js");
+    await navigator.serviceWorker.ready;
+    const tok=await getToken(getMessaging(app),{vapidKey:VAPID_KEY,serviceWorkerRegistration:reg});
+    if(!tok)throw new Error("no token");
+    localStorage.setItem("goty_push","1");toast(t("notif_ok"));render();
+  }catch(e){lastErr="push: "+(e.code||e.message);toast(t("notif_fail"))}
+}
+async function initPushListener(){
+  try{if(VAPID_KEY.startsWith("PASTE")||EMU||!(await isSupported()))return;
+    onMessage(getMessaging(app),m=>{const n=m.notification||{};toast((n.title?n.title+": ":"")+(n.body||""))})}catch(e){}
+}
+function pushCard(){
+  if(VAPID_KEY.startsWith("PASTE")||EMU)return "";
+  const on=localStorage.getItem("goty_push")==="1"&&"Notification" in window&&Notification.permission==="granted";
+  return `<div class="card" style="text-align:center"><div class="small" style="margin-bottom:6px">${t("notif_h")}</div><button id="push" ${on?"disabled":""}>${on?t("notif_on"):t("notif_btn")}</button></div>`;
+}
+
+// ===== التقارير =====
+function reportView(){
+  $("#modal").innerHTML=`<div class="modal" id="mbg"><div class="sheet"><h3 style="margin:0 0 6px">${t("rp_h")}</h3>
+  <div class="small">${t("rp_p")}</div>
+  <textarea id="rt" rows="4" maxlength="800" placeholder="${t("rp_ph")}"></textarea>
+  <a class="btn" id="rmail" href="#">${t("rp_mail")}</a>
+  <button id="rcopyE" class="sec" style="width:100%;margin:6px 0">${t("rp_ce",EMAIL)}</button>
+  <button id="rcopyD" class="sec" style="width:100%;margin:6px 0">${t("rp_cd",DISCORD)}</button>
+  <button id="rclose" class="sec" style="width:100%;margin:6px 0">${t("rp_close")}</button></div></div>`;
+  const info=()=>t("rp_issue")+$("#rt").value.trim()+"\n\n"+t("rp_auto")+"\n"+t("rp_user")+(username||t("rp_guest"))+"\n"+t("rp_page")+location.href+"\n"+t("rp_tab")+tab+"\n"+t("rp_lang")+lang+"\n"+t("rp_time")+new Date().toString()+"\n"+t("rp_br")+navigator.userAgent+"\n"+t("rp_scr")+innerWidth+"x"+innerHeight+"\n"+t("rp_net")+(navigator.onLine?t("rp_on"):t("rp_off"))+"\n"+t("rp_err")+(lastErr||t("rp_noerr"));
+  const upd=()=>{$("#rmail").href="mailto:"+EMAIL+"?subject="+encodeURIComponent(t("rp_subj"))+"&body="+encodeURIComponent(info())};
+  upd();$("#rt").oninput=upd;$("#rmail").onclick=upd;
+  $("#rcopyE").onclick=()=>copy(EMAIL,t("rp_cpe"));
+  $("#rcopyD").onclick=()=>copy(DISCORD,t("rp_cpd"));
+  $("#rclose").onclick=()=>{$("#modal").innerHTML=""};
+  $("#mbg").onclick=e=>{if(e.target.id==="mbg")$("#modal").innerHTML=""};
+}
+const footer=()=>"";
+const bindFooter=()=>{};
+function toggleLang(){lang=lang==="ar"?"en":"ar";localStorage.setItem("goty_lang",lang);applyLang();me?render():loginView()}
+function menuHTML(){
+  return `<button class="sec menubtn" id="mbtn" aria-label="menu">⋮</button>`;
+}
+function openMenu(){
+  if($("#menu")){$("#menu").remove();return}
+  const items=(me?[["profile",t("menu_profile")],["sug",t("menu_sug")],["refresh",t("menu_refresh")]]:[]).concat([["lang",t("menu_lang")],["report",t("menu_report")]]).concat(me?[["out",t("menu_out")]]:[]);
+  const d=document.createElement("div");d.className="menu";d.id="menu";
+  d.innerHTML=items.map(i=>`<button data-m="${i[0]}">${i[1]}</button>`).join("");
+  document.body.appendChild(d);
+  d.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{d.remove();const k=b.dataset.m;
+    if(k==="profile")profileView();else if(k==="sug")sugView();else if(k==="refresh"){toast(t("refreshing"));refresh()}else if(k==="lang")toggleLang();else if(k==="report")reportView();else if(k==="out")signOut(auth)});
+  setTimeout(()=>document.addEventListener("click",function f(e){if(!e.target.closest("#menu,#mbtn")){d.remove()}document.removeEventListener("click",f)},{once:false}),0);
+}
+function bindMenu(){$("#mbtn").onclick=openMenu}
+function sugView(){
+  $("#modal").innerHTML=`<div class="modal" id="mbg"><div class="sheet"><h3 style="margin:0 0 6px">${t("sg_h")}</h3><div class="small">${t("sg_p")}</div>
+  <textarea id="sgt" rows="5" maxlength="500" placeholder="${t("sg_ph")}"></textarea><div class="msg" id="sgm"></div>
+  <button id="sgs">${t("sg_send")}</button><button id="sgc" class="sec" style="width:100%;margin:6px 0">${t("rp_close")}</button></div></div>`;
+  $("#sgc").onclick=()=>{$("#modal").innerHTML=""};
+  $("#mbg").onclick=e=>{if(e.target.id==="mbg")$("#modal").innerHTML=""};
+  $("#sgs").onclick=async()=>{const x=$("#sgt").value.trim();if(!x){$("#sgm").textContent=t("sg_empty");return}
+    $("#sgs").disabled=true;
+    const n=(+localStorage.getItem("goty_sg")||0)%5+1;
+    try{await setDoc(doc(db,"suggestions",me.uid+"_"+n),{uid:me.uid,username,text:x,ts:serverTimestamp()});localStorage.setItem("goty_sg",n);$("#modal").innerHTML="";toast(t("sg_ok"))}
+    catch(e){$("#sgm").textContent=errText(e);$("#sgs").disabled=false}};
+}
+function profileView(){
+  let photo=profile.photo||"",changed=false;
+  const u0=me.uid;
+  $("#modal").innerHTML=`<div class="modal" id="mbg"><div class="sheet"><h3 style="margin:0 0 6px">${t("pf_h")}</h3>
+  <div id="pav" style="text-align:center"></div>
+  <div style="display:flex;gap:8px;justify-content:center"><button class="sec" id="pick">${t("pf_pick")}</button><button class="sec" id="prm">${t("pf_rm")}</button></div>
+  <input type="file" id="pfile" accept="image/*" style="display:none">
+  <div class="small" style="margin-top:10px">${t("pf_name")}</div>
+  <input id="pname" maxlength="30" value="${esc(profile.displayName||"")}" placeholder="${t("pf_name_ph")}">
+  <div class="small">${t("pf_login",esc(username))}</div><div class="small">${t("pf_note")}</div>
+  <div class="msg" id="pm"></div>
+  <button id="psave">${t("pf_save")}</button><button id="pclose" class="sec" style="width:100%;margin:6px 0">${t("rp_close")}</button></div></div>`;
+  const showAv=()=>{$("#pav").innerHTML=photo?`<img class="av big" src="${photo}" alt="">`:`<span class="av big">${esc([...(($("#pname")?.value.trim())||dname(u0,username))][0]||"?").toUpperCase()}</span>`};
+  showAv();
+  $("#pname").oninput=()=>{if(!photo)showAv()};
+  $("#pick").onclick=()=>$("#pfile").click();
+  $("#prm").onclick=()=>{photo="";changed=true;showAv()};
+  $("#pfile").onchange=e=>{const f=e.target.files[0];if(!f)return;
+    const img=new Image(),url=URL.createObjectURL(f);
+    img.onload=()=>{const S=96,c=document.createElement("canvas");c.width=c.height=S;const x=c.getContext("2d");
+      const m=Math.min(img.width,img.height),sx=(img.width-m)/2,sy=(img.height-m)/2;
+      x.fillStyle="#fff";x.fillRect(0,0,S,S);x.drawImage(img,sx,sy,m,m,0,0,S,S);
+      let q=.75,d=c.toDataURL("image/jpeg",q);while(d.length>14000&&q>.3){q-=.1;d=c.toDataURL("image/jpeg",q)}
+      URL.revokeObjectURL(url);photo=d;changed=true;showAv()};
+    img.onerror=()=>{$("#pm").textContent=t("pf_img_err")};img.src=url};
+  $("#psave").onclick=async()=>{
+    const n=$("#pname").value.trim();
+    if(n.length<1||n.length>30){$("#pm").textContent=t("pf_name_err");return}
+    $("#psave").disabled=true;
+    try{await setDoc(doc(db,"users",me.uid),{displayName:n,photo},{merge:true});
+      profile={...profile,displayName:n,photo};users[me.uid]=profile;
+      $("#modal").innerHTML="";toast(t("pf_saved"));render()}
+    catch(e){$("#pm").textContent=errText(e);$("#psave").disabled=false}};
+  $("#pclose").onclick=()=>{$("#modal").innerHTML=""};
+  $("#mbg").onclick=e=>{if(e.target.id==="mbg")$("#modal").innerHTML=""};
+}
+
+// ===== الدخول =====
 function loginView(){
   clearInterval(timer);
-  $("#who").innerHTML="";
-  $("#app").innerHTML=`<div class="card"><h2>تسجيل الدخول / حساب جديد</h2>
-  <form id="f"><input id="u" value="${esc(localStorage.getItem("goty_u")||"")}" placeholder="اسم المستخدم (حروف إنجليزي وأرقام)" autocapitalize="none" autocomplete="username">
-  <input id="p" type="password" placeholder="كلمة السر (6 حروف على الأقل)" autocomplete="current-password">
-  <label class="small"><input id="show" type="checkbox" style="width:auto;margin:0 0 0 6px"> إظهار كلمة السر</label>
+  $("#who").innerHTML=menuHTML();bindMenu();
+  $("#app").innerHTML=`<div class="card"><h2>${t("login_h")}</h2>
+  <form id="f"><input id="u" value="${esc(localStorage.getItem("goty_u")||"")}" placeholder="${t("ph_user")}" autocapitalize="none" autocomplete="username" dir="ltr">
+  <input id="p" type="password" placeholder="${t("ph_pass")}" autocomplete="current-password" dir="ltr">
+  <label class="small"><input id="show" type="checkbox" style="width:auto;margin:0 6px"> ${t("show_pass")}</label>
   <div class="msg" id="m"></div>
-  <button id="login" type="submit">دخول</button>
-  <button id="reg" type="button" style="background:#2d2d42;color:#eee">إنشاء حساب جديد</button></form></div>`+footer();
+  <button id="login" type="submit">${t("login")}</button>
+  <button id="reg" type="button" style="background:#2d2d42;color:#eee">${t("register")}</button></form></div>`+"";
   $("#show").onchange=e=>{$("#p").type=e.target.checked?"text":"password"};
   const get=()=>{const u=$("#u").value.trim(),p=$("#p").value;
-    if(!validUser(u)){$("#m").textContent="اسم المستخدم: 3 إلى 20 حرف إنجليزي أو أرقام أو _";return null}
-    if(p.length<6){$("#m").textContent="كلمة السر 6 حروف على الأقل";return null}
+    if(!validUser(u)){$("#m").textContent=t("err_user");return null}
+    if(p.length<6){$("#m").textContent=t("err_pass6");return null}
     return [u,p]};
   const busy=v=>{$("#login").disabled=v;$("#reg").disabled=v};
   $("#f").onsubmit=async e=>{e.preventDefault();const x=get();if(!x)return;busy(true);$("#m").textContent="";localStorage.setItem("goty_u",x[0]);
     try{await signInWithEmailAndPassword(auth,mail(x[0]),x[1])}catch(er){$("#m").textContent=errText(er);busy(false)}};
-  bindFooter();
   $("#reg").onclick=async()=>{const x=get();if(!x)return;busy(true);$("#m").textContent="";
     pendingName=x[0];
     try{await createUserWithEmailAndPassword(auth,mail(x[0]),x[1])}catch(er){pendingName="";$("#m").textContent=errText(er);busy(false)}};
 }
 
+// ===== البيانات =====
 async function load(){
-  const [vs,rs]=await Promise.all([getDocs(collection(db,"votes")),getDocs(collection(db,"reviews"))]);
+  const [vs,rs,us]=await Promise.all([getDocs(collection(db,"votes")),getDocs(collection(db,"reviews")),getDocs(collection(db,"users"))]);
+  users={};us.forEach(d=>users[d.id]=d.data());
+  if(me&&users[me.uid])profile=users[me.uid];
   const votes=[],reviews=[];
   vs.forEach(d=>votes.push({uid:d.id,...d.data()}));
   rs.forEach(d=>reviews.push(d.data()));
@@ -186,125 +350,148 @@ async function load(){
 }
 const myVote=()=>data.votes.find(v=>v.uid===me.uid)?.game||null;
 const counts=()=>{const c={};data.votes.forEach(v=>c[v.game]=(c[v.game]||0)+1);return c};
+const bdi=x=>"<bdi>"+esc(x)+"</bdi>";
+const dname=(uid,fallback)=>(users[uid]&&users[uid].displayName)||(users[uid]&&users[uid].username)||fallback||"?";
+function avatar(uid,fallback,big){
+  const u=users[uid]||{},n=dname(uid,fallback);
+  if(u.photo)return `<img class="av${big?" big":""}" src="${u.photo}" alt="">`;
+  return `<span class="av${big?" big":""}">${esc([...n][0]||"?").toUpperCase()}</span>`;
+}
 
 function shell(inner){
-  $("#who").innerHTML=`<span class="small">${esc(username)}</span> <button class="sec" id="rf" title="تحديث">🔄</button> <button class="sec" id="out">خروج</button>`;
-  $("#rf").onclick=()=>{toast("جارٍ التحديث...");refresh()};
-  $("#out").onclick=()=>signOut(auth);
+  $("#who").innerHTML=`<div class="hd">${avatar(me.uid,username)}<span class="small">${esc(dname(me.uid,username))}</span>${menuHTML()}</div>`;
+  bindMenu();
   $("#app").innerHTML=`<div class="tabs">
-   <button data-t="vote" class="${tab==="vote"?"on":""}">🗳️ التصويت</button>
-   <button data-t="results" class="${tab==="results"?"on":""}">📊 النتائج</button>
-   <button data-t="reviews" class="${tab==="reviews"?"on":""}">💬 التقييمات</button></div>`+inner+footer();
+   <button data-t="vote" class="${tab==="vote"?"on":""}">${t("t_vote")}</button>
+   <button data-t="results" class="${tab==="results"?"on":""}">${t("t_results")}</button>
+   <button data-t="reviews" class="${tab==="reviews"?"on":""}">${t("t_reviews")}</button></div>`+winnerBanner()+inner+footer();
   bindFooter();
   document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render()});
 }
+function winnerBanner(){
+  if(phase()!=="ceremony"||!data)return "";
+  const c=counts(),total=data.votes.length;
+  if(!total)return `<div class="card win"><h2>${t("win_none")}</h2></div>`;
+  const top=Math.max(...GAMES.map(g=>c[g.id]||0)),ws=GAMES.filter(g=>(c[g.id]||0)===top);
+  if(ws.length>1)return `<div class="card win"><h2>${t("win_tie",ws.map(g=>bdi(g.name)).join(t("and")))}</h2><div class="small">${t("win_votes",top,total)}</div><div class="small" style="margin-top:6px">${t("win_note")}</div></div>`;
+  const g=ws[0];
+  return `<div class="card win"><div>${t("win_h")}</div>${art(g)}<h2>${bdi(g.name)}</h2><div>${t("win_votes",top,total)}</div><div class="small" style="margin-top:6px">${t("win_note")}</div></div>`;
+}
 function countdown(){
-  const left=DEADLINE-Date.now();
-  if(left<=0)return `<div class="card" style="text-align:center">⏰ انتهى وقت التصويت. النتائج النهائية في تبويب النتائج.</div>`;
-  return `<div class="card"><div class="small" style="text-align:center;margin-bottom:6px">⏳ باقي على نهاية التصويت (10 ديسمبر الساعة 4 الفجر بتوقيت القاهرة)</div>
-  <div class="cd"><div><b id="cd-d">0</b>يوم</div><div><b id="cd-h">0</b>ساعة</div><div><b id="cd-m">0</b>دقيقة</div><div><b id="cd-s">0</b>ثانية</div></div></div>`;
+  const p=phase();
+  if(p==="ceremony")return "";
+  return `<div class="card"><div class="small" style="text-align:center;margin-bottom:6px">${p==="open"?t("cd_open"):t("cd_wait")}</div>
+  <div class="cd"><div><b id="cd-d">0</b>${t("d")}</div><div><b id="cd-h">0</b>${t("h")}</div><div><b id="cd-m">0</b>${t("m")}</div><div><b id="cd-s">0</b>${t("s")}</div></div></div>`;
 }
 function tick(){
-  const l=Math.max(0,DEADLINE-Date.now()),s=Math.floor(l/1000);
+  const target=phase()==="open"?CLOSE:CEREMONY;
+  if(now()>=target){render();return}
+  const s=Math.floor((target-now())/1000);
   const set=(i,v)=>{const e=$("#cd-"+i);if(e)e.textContent=v};
   set("d",Math.floor(s/86400));set("h",Math.floor(s%86400/3600));set("m",Math.floor(s%3600/60));set("s",s%60);
 }
 async function render(){
   clearInterval(timer);
-  if(!data){$("#app").innerHTML='<div class="spin">جارٍ التحميل...</div>';
-    try{await load()}catch(e){$("#app").innerHTML=`<div class="card"><div class="msg">${esc(errText(e))}</div><button id="retry">إعادة المحاولة</button></div>`;$("#retry").onclick=render;return}}
-  if(tab==="results")return resultsView();
-  if(tab==="reviews")return reviewsView();
-  homeView();
+  if(!data){$("#app").innerHTML=`<div class="spin">${t("loading")}</div>`;
+    try{await load()}catch(e){$("#app").innerHTML=`<div class="card"><div class="msg">${esc(errText(e))}</div><button id="retry">${t("retry")}</button></div>`;$("#retry").onclick=render;return}}
+  if(tab==="results")resultsView();else if(tab==="reviews")reviewsView();else homeView();
+  if(phase()!=="ceremony"&&$("#cd-s")){tick();timer=setInterval(tick,1000)}
+  scheduleRollover();
+}
+let rollTimer=null;
+function scheduleRollover(){ /* قلب الصفحة تلقائياً عند وقت الحفل حتى لو في تبويب آخر */
+  clearTimeout(rollTimer);
+  if(phase()==="ceremony")return;
+  const target=phase()==="open"?CLOSE:CEREMONY,ms=target-now();
+  if(ms>0&&ms<2147483000)rollTimer=setTimeout(()=>{if(me)render()},ms+500);
 }
 async function refresh(){data=null;await render()}
 
 function homeView(){
-  const mine=myVote(),c=counts(),total=data.votes.length||1,open=!closed();
-  shell(countdown()+
-   (mine?`<div class="card ok">✅ صوتّ لـ: <bdi>${esc(GAMES.find(g=>g.id===mine).name)}</bdi>${open?" (تقدر تغيّر صوتك)":""}</div>`:`<div class="card">لسه ما صوتّش. اختار لعبة وصوّت 👇</div>`)+
+  const mine=myVote(),c=counts(),total=data.votes.length||1,open=phase()==="open";
+  shell(countdown()+(open?"":`<div class="card">${t("closed")}</div>`)+
+   (mine?`<div class="card ok">${t("voted_for",bdi(GAMES.find(g=>g.id===mine).name))}${open?t("can_change"):""}</div>`:(open?`<div class="card">${t("not_voted")}</div>`:""))+
    GAMES.map((g,i)=>`<div class="card" style="animation-delay:${i*.06}s"><div class="gm">${art(g)}<div class="info">
      <div><b class="nm">${esc(g.name)}</b><div class="small">${esc(g.dev)}</div></div>
-     <div><div class="small">${c[g.id]||0} صوت</div><div class="track"><div class="bar" data-w="${Math.round((c[g.id]||0)/total*100)}"></div></div></div>
-     <div class="row"><button data-v="${g.id}" class="${mine===g.id?"voted":""}" ${open?"":"disabled"}>${mine===g.id?"✔ صوتك":"صوّت"}</button><button class="sec" data-r="${g.id}">💬 ${data.reviews.filter(r=>r.game===g.id).length}</button></div>
-   </div></div></div>`).join("")+
-   `<div class="card" style="text-align:center"><div class="small" style="margin-bottom:6px">ادعو أصحابك للتصويت</div><button id="share">📤 شارك رابط الموقع</button><button id="shareR" class="sec" style="width:100%;margin-top:8px">📊 شارك النتائج الحالية</button></div>`);
+     <div><div class="small">${t("votes",c[g.id]||0)}</div><div class="track"><div class="bar" data-w="${Math.round((c[g.id]||0)/total*100)}"></div></div></div>
+     <div class="row"><button data-v="${g.id}" class="${mine===g.id?"voted":""}" ${open?"":"disabled"}>${mine===g.id?t("your_vote"):t("vote")}</button><button class="sec" data-r="${g.id}">💬 ${data.reviews.filter(r=>r.game===g.id).length}</button></div>
+   </div></div></div>`).join("")+pushCard()+
+   `<div class="card" style="text-align:center"><div class="small" style="margin-bottom:6px">${t("invite")}</div><button id="share">${t("share_site")}</button><button id="shareR" class="sec" style="width:100%;margin-top:8px">${t("share_res")}</button></div>`);
   setTimeout(()=>document.querySelectorAll(".bar").forEach(b=>b.style.width=b.dataset.w+"%"),50);
-  if(open){tick();timer=setInterval(tick,1000)}
   document.querySelectorAll("[data-v]").forEach(b=>b.onclick=async()=>{
     document.querySelectorAll("[data-v]").forEach(x=>x.disabled=true);
-    try{await setDoc(doc(db,"votes",me.uid),{game:b.dataset.v,username,ts:serverTimestamp()});toast("تم تسجيل صوتك ✔");await refresh()}
+    try{await setDoc(doc(db,"votes",me.uid),{game:b.dataset.v,username,ts:serverTimestamp()});toast(t("vote_done"));await refresh()}
     catch(e){alert(errText(e));render()}});
   document.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>gameView(b.dataset.r));
   $("#share").onclick=shareSite;$("#shareR").onclick=shareResults;
+  const pb=$("#push");if(pb)pb.onclick=enablePush;
 }
 async function shareSite(){
-  const url=location.origin+location.pathname,text="صوّت معايا على لعبة العام 🏆 "+url;
-  if(navigator.share){try{await navigator.share({title:"لعبة العام",text:"صوّت معايا على لعبة العام 🏆",url});return}catch(e){if(e.name==="AbortError")return}}
-  try{await navigator.clipboard.writeText(url);toast("تم نسخ الرابط")}catch(e){window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank")}
+  const url=location.origin+location.pathname;
+  if(navigator.share){try{await navigator.share({title:t("title"),text:t("share_text"),url});return}catch(e){if(e.name==="AbortError")return}}
+  try{await navigator.clipboard.writeText(url);toast(t("copied"))}catch(e){window.open("https://wa.me/?text="+encodeURIComponent(t("share_text")+" "+url),"_blank")}
 }
-
 async function shareResults(){
-  const c=counts(),t=data.votes.length;
-  const lines=GAMES.slice().sort((a,b)=>(c[b.id]||0)-(c[a.id]||0)).map((g,i)=>(i+1)+". "+g.name+" - "+(c[g.id]||0)+" صوت");
-  const text="🏆 نتائج تصويت لعبة العام بين الأصحاب ("+t+" صوت)\n"+lines.join("\n")+"\nصوّت معانا: "+location.origin+location.pathname;
+  const c=counts(),n=data.votes.length;
+  const lines=GAMES.slice().sort((a,b)=>(c[b.id]||0)-(c[a.id]||0)).map((g,i)=>t("res_line",i+1,g.name,c[g.id]||0));
+  const text=t("res_msg",n)+"\n"+lines.join("\n")+"\n"+t("res_join")+location.origin+location.pathname;
   if(navigator.share){try{await navigator.share({text});return}catch(e){if(e.name==="AbortError")return}}
   window.open("https://wa.me/?text="+encodeURIComponent(text),"_blank");
 }
+
 function resultsView(){
   const c=counts(),total=data.votes.length;
   const sorted=GAMES.slice().sort((a,b)=>(c[b.id]||0)-(c[a.id]||0));
-  const top=c[sorted[0].id]||0, tied=sorted.filter(g=>(c[g.id]||0)===top);
+  const top=c[sorted[0].id]||0,tied=sorted.filter(g=>(c[g.id]||0)===top);
   const medals=["🥇","🥈","🥉"];
-  const names=g=>data.votes.filter(v=>v.game===g.id).map(v=>esc(v.username)).join("، ");
-  shell(`<div class="card"><b>إجمالي الأصوات: ${total}</b>
-   ${total?`<div class="small" style="margin-top:4px">${tied.length>1?"تعادل في الصدارة بين "+tied.map(g=>"<bdi>"+esc(g.name)+"</bdi>").join(" و "):"المتصدر: "+"<bdi>"+esc(sorted[0].name)+"</bdi>"}</div>`:'<div class="small">لا توجد أصوات بعد</div>'}</div>`+
+  const names=g=>data.votes.filter(v=>v.game===g.id).map(v=>esc(dname(v.uid,v.username))).join(lang==="ar"?"، ":", ");
+  shell(`<div class="card"><b>${t("res_total",total)}</b>
+   ${total?`<div class="small" style="margin-top:4px">${tied.length>1?t("res_tie",tied.map(g=>bdi(g.name)).join(t("and"))):t("res_lead",bdi(sorted[0].name))}</div>`:`<div class="small">${t("res_none")}</div>`}</div>`+
   sorted.map((g,i)=>`<div class="card" style="animation-delay:${i*.06}s"><div class="rank"><div class="n">${medals[i]||i+1}</div>${art(g)}
-   <div class="info" style="gap:4px"><b class="nm">${esc(g.name)}</b><div class="small">${c[g.id]||0} صوت (${total?Math.round((c[g.id]||0)/total*100):0}%)</div>
+   <div class="info" style="gap:4px"><b class="nm">${esc(g.name)}</b><div class="small">${t("votes",c[g.id]||0)} (${total?Math.round((c[g.id]||0)/total*100):0}%)</div>
    <div class="track"><div class="bar" data-w="${total?Math.round((c[g.id]||0)/total*100):0}"></div></div></div></div>
    ${names(g)?`<div class="small">👥 ${names(g)}</div>`:""}</div>`).join(""));
   setTimeout(()=>document.querySelectorAll(".bar").forEach(b=>b.style.width=b.dataset.w+"%"),50);
 }
 
-let rfilter="";
 function reviewsView(){
   const list=data.reviews.filter(r=>!rfilter||r.game===rfilter);
-  shell(`<div class="chips"><button data-f="" class="${rfilter===""?"on":""}">الكل</button>${GAMES.map(g=>`<button data-f="${g.id}" class="${rfilter===g.id?"on":""}">${esc({"007":"007","control":"Control","gta6":"GTA VI","phantom":"Phantom Blade","re":"Resident Evil","zelda":"Zelda OoT"}[g.id])}</button>`).join("")}</div>
-  <div class="card"><b>آخر التقييمات (${list.length})</b>
-  ${list.map(r=>{const g=GAMES.find(x=>x.id===r.game);return g?`<div class="rev"><b>${esc(r.username)}</b>${r.uid===me.uid?'<span class="badge">أنت</span>':""} <span class="small">عن <bdi>${esc(g.name)}</bdi></span><div>${esc(r.text)}</div></div>`:""}).join("")||'<div class="small">لا توجد تقييمات بعد. افتح أي لعبة من التصويت واكتب رأيك.</div>'}</div>`);
-
+  shell(`<div class="chips"><button data-f="" class="${rfilter===""?"on":""}">${t("rev_all")}</button>${GAMES.map(g=>`<button data-f="${g.id}" class="${rfilter===g.id?"on":""}">${esc(g.short)}</button>`).join("")}</div>
+  <div class="card"><b>${t("rev_h",list.length)}</b>
+  ${list.map(r=>{const g=GAMES.find(x=>x.id===r.game);return g?`<div class="rev">${avatar(r.uid,r.username)}<b>${esc(dname(r.uid,r.username))}</b>${r.uid===me.uid?`<span class="badge">${t("rev_you")}</span>`:""} <span class="small">${t("rev_about")} ${bdi(g.name)}</span><div>${esc(r.text)}</div></div>`:""}).join("")||`<div class="small">${t("rev_none")}</div>`}</div>`);
   document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{rfilter=b.dataset.f;reviewsView()});
 }
 
 function gameView(id){
   const g=GAMES.find(x=>x.id===id);
   const list=data.reviews.filter(r=>r.game===id),mineR=list.find(r=>r.uid===me.uid);
-  shell(`<p><a id="back">← رجوع</a></p><div class="card"><div class="gm">${art(g)}<div class="info"><b class="nm">${esc(g.name)}</b><div class="small">${esc(g.dev)}</div></div></div></div>
-  <div class="card"><b>${mineR?"عدّل تقييمك":"اكتب تقييمك"}</b>
-  <textarea id="t" rows="4" maxlength="1000" placeholder="رأيك في اللعبة...">${mineR?esc(mineR.text):""}</textarea>
-  <div class="small" id="cnt">0/1000</div><div class="msg" id="m"></div><button id="save">حفظ التقييم</button></div>
-  <div class="card"><b>تقييمات الأصدقاء (${list.length})</b>${list.map(r=>`<div class="rev"><b>${esc(r.username)}</b><div>${esc(r.text)}</div></div>`).join("")||'<div class="small">لا توجد تقييمات بعد</div>'}</div>`);
+  shell(`<p><a id="back">${t("back")}</a></p><div class="card"><div class="gm">${art(g)}<div class="info"><b class="nm">${esc(g.name)}</b><div class="small">${esc(g.dev)}</div></div></div></div>
+  <div class="card"><b>${mineR?t("rev_edit"):t("rev_write")}</b>
+  <textarea id="t" rows="4" maxlength="1000" placeholder="${t("rev_ph")}">${mineR?esc(mineR.text):""}</textarea>
+  <div class="small" id="cnt">0/1000</div><div class="msg" id="m"></div><button id="save">${t("rev_save")}</button></div>
+  <div class="card"><b>${t("rev_friends",list.length)}</b>${list.map(r=>`<div class="rev">${avatar(r.uid,r.username)}<b>${esc(dname(r.uid,r.username))}</b><div>${esc(r.text)}</div></div>`).join("")||`<div class="small">${t("rev_none2")}</div>`}</div>`);
   const cnt=()=>$("#cnt").textContent=$("#t").value.length+"/1000";cnt();$("#t").oninput=cnt;
   $("#back").onclick=()=>{tab="vote";render()};
-  $("#save").onclick=async()=>{const t=$("#t").value.trim();if(!t){$("#m").textContent="اكتب تقييم";return}
+  $("#save").onclick=async()=>{const x=$("#t").value.trim();if(!x){$("#m").textContent=t("rev_empty");return}
     $("#save").disabled=true;
-    try{await setDoc(doc(db,"reviews",me.uid+"_"+id),{game:id,username,text:t,ts:serverTimestamp(),uid:me.uid});toast("تم حفظ تقييمك ✔");data=null;await load();gameView(id)}
+    try{await setDoc(doc(db,"reviews",me.uid+"_"+id),{game:id,username,text:x,ts:serverTimestamp(),uid:me.uid});toast(t("rev_saved"));data=null;await load();gameView(id)}
     catch(e){$("#m").textContent=errText(e);$("#save").disabled=false}};
 }
 
 onAuthStateChanged(auth,async u=>{
   me=u;data=null;tab="vote";
   if(!u){loginView();return}
-  $("#app").innerHTML='<div class="spin">جارٍ التحميل...</div>';
+  $("#app").innerHTML=`<div class="spin">${t("loading")}</div>`;
   const fallback=(u.email||"").split("@")[0];
   try{
     const ref=doc(db,"users",u.uid),s=await getDoc(ref);
-    if(s.exists())username=s.data().username;
+    if(s.exists()){username=s.data().username;profile=s.data();users[u.uid]=profile}
     else{username=pendingName||fallback;await setDoc(ref,{username})}
   }catch(e){username=pendingName||fallback}
   pendingName="";
   render();
 });
+applyLang();syncOff();initPushListener();
 </script>
 </body>
 </html>
